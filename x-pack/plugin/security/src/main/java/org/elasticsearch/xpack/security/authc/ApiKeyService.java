@@ -67,12 +67,12 @@ import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xcontent.DeprecationHandler;
 import org.elasticsearch.xcontent.InstantiatingObjectParser;
-import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.ParseField;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
 import org.elasticsearch.xcontent.XContentLocation;
 import org.elasticsearch.xcontent.XContentParser;
+import org.elasticsearch.xcontent.XContentParserConfiguration;
 import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xpack.core.XPackSettings;
 import org.elasticsearch.xpack.core.security.ScrollHelper;
@@ -89,6 +89,7 @@ import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationResult;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationToken;
+import org.elasticsearch.xpack.core.security.authc.RealmConfig;
 import org.elasticsearch.xpack.core.security.authc.RealmDomain;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
@@ -381,15 +382,17 @@ public class ApiKeyService {
 
         builder.field("name", name).field("version", version.id).field("metadata_flattened", metadata);
         {
+            final User user = authentication.getEffectiveSubject().getUser();
+            final Authentication.RealmRef sourceRealm = authentication.getEffectiveSubject().getRealm();
             builder.startObject("creator")
-                .field("principal", authentication.getUser().principal())
-                .field("full_name", authentication.getUser().fullName())
-                .field("email", authentication.getUser().email())
-                .field("metadata", authentication.getUser().metadata())
-                .field("realm", authentication.getSourceRealm().getName())
-                .field("realm_type", authentication.getSourceRealm().getType());
-            if (authentication.getSourceRealm().getDomain() != null) {
-                builder.field("realm_domain", authentication.getSourceRealm().getDomain());
+                .field("principal", user.principal())
+                .field("full_name", user.fullName())
+                .field("email", user.email())
+                .field("metadata", user.metadata())
+                .field("realm", sourceRealm.getName())
+                .field("realm_type", sourceRealm.getType());
+            if (sourceRealm.getDomain() != null) {
+                builder.field("realm_domain", sourceRealm.getDomain());
             }
             builder.endObject();
         }
@@ -452,8 +455,7 @@ public class ApiKeyService {
                 final ApiKeyDoc apiKeyDoc;
                 try (
                     XContentParser parser = XContentHelper.createParser(
-                        NamedXContentRegistry.EMPTY,
-                        LoggingDeprecationHandler.INSTANCE,
+                        XContentParserConfiguration.EMPTY.withDeprecationHandler(LoggingDeprecationHandler.INSTANCE),
                         response.getSourceAsBytesRef(),
                         XContentType.JSON
                     )
@@ -498,8 +500,9 @@ public class ApiKeyService {
                 try (
                     XContentParser parser = XContentType.JSON.xContent()
                         .createParser(
-                            NamedXContentRegistry.EMPTY,
-                            new ApiKeyLoggingDeprecationHandler(deprecationLogger, apiKeyId),
+                            XContentParserConfiguration.EMPTY.withDeprecationHandler(
+                                new ApiKeyLoggingDeprecationHandler(deprecationLogger, apiKeyId)
+                            ),
                             BytesReference.bytes(builder).streamInput()
                         )
                 ) {
@@ -526,8 +529,7 @@ public class ApiKeyService {
         List<RoleDescriptor> roleDescriptors = new ArrayList<>();
         try (
             XContentParser parser = XContentHelper.createParser(
-                NamedXContentRegistry.EMPTY,
-                new ApiKeyLoggingDeprecationHandler(deprecationLogger, apiKeyId),
+                XContentParserConfiguration.EMPTY.withDeprecationHandler(new ApiKeyLoggingDeprecationHandler(deprecationLogger, apiKeyId)),
                 bytesReference,
                 XContentType.JSON
             )
@@ -920,7 +922,7 @@ public class ApiKeyService {
                         invalidateListener.onResponse(InvalidateApiKeyResponse.emptyResponse());
                     } else {
                         invalidateAllApiKeys(
-                            apiKeys.stream().map(apiKey -> apiKey.getId()).collect(Collectors.toSet()),
+                            apiKeys.stream().map(ApiKey::getId).collect(Collectors.toSet()),
                             invalidateListener
                         );
                     }
@@ -930,7 +932,7 @@ public class ApiKeyService {
     }
 
     private void invalidateAllApiKeys(Collection<String> apiKeyIds, ActionListener<InvalidateApiKeyResponse> invalidateListener) {
-        indexInvalidation(apiKeyIds, invalidateListener, null);
+        indexInvalidation(apiKeyIds, invalidateListener);
     }
 
     private void findApiKeys(
@@ -1026,16 +1028,10 @@ public class ApiKeyService {
     /**
      * Performs the actual invalidation of a collection of api keys
      *
-     * @param apiKeyIds       the api keys to invalidate
-     * @param listener        the listener to notify upon completion
-     * @param previousResult  if this not the initial attempt for invalidation, it contains the result of invalidating
-     *                        api keys up to the point of the retry. This result is added to the result of the current attempt
+     * @param apiKeyIds the api keys to invalidate
+     * @param listener  the listener to notify upon completion
      */
-    private void indexInvalidation(
-        Collection<String> apiKeyIds,
-        ActionListener<InvalidateApiKeyResponse> listener,
-        @Nullable InvalidateApiKeyResponse previousResult
-    ) {
+    private void indexInvalidation(Collection<String> apiKeyIds, ActionListener<InvalidateApiKeyResponse> listener) {
         maybeStartApiKeyRemover();
         if (apiKeyIds.isEmpty()) {
             listener.onFailure(new ElasticsearchSecurityException("No api key ids provided for invalidation"));
@@ -1058,11 +1054,6 @@ public class ApiKeyService {
                         ArrayList<ElasticsearchException> failedRequestResponses = new ArrayList<>();
                         ArrayList<String> previouslyInvalidated = new ArrayList<>();
                         ArrayList<String> invalidated = new ArrayList<>();
-                        if (null != previousResult) {
-                            failedRequestResponses.addAll((previousResult.getErrors()));
-                            previouslyInvalidated.addAll(previousResult.getPreviouslyInvalidatedApiKeys());
-                            invalidated.addAll(previousResult.getInvalidatedApiKeys());
-                        }
                         for (BulkItemResponse bulkItemResponse : bulkResponse.getItems()) {
                             if (bulkItemResponse.isFailed()) {
                                 Throwable cause = bulkItemResponse.getFailure().getCause();
@@ -1321,7 +1312,7 @@ public class ApiKeyService {
         if (authentication.isApiKey()) {
             return (String) authentication.getMetadata().get(AuthenticationField.API_KEY_CREATOR_REALM_NAME);
         } else {
-            return authentication.getSourceRealm().getName();
+            return authentication.getEffectiveSubject().getRealm().getName();
         }
     }
 
@@ -1331,11 +1322,11 @@ public class ApiKeyService {
         if (authentication.isApiKey()) {
             return new String[] { (String) authentication.getMetadata().get(AuthenticationField.API_KEY_CREATOR_REALM_NAME) };
         } else {
-            RealmDomain domain = authentication.getSourceRealm().getDomain();
+            RealmDomain domain = authentication.getEffectiveSubject().getRealm().getDomain();
             if (domain != null) {
-                return domain.realms().stream().map(realmIdentifier -> realmIdentifier.getName()).toArray(String[]::new);
+                return domain.realms().stream().map(RealmConfig.RealmIdentifier::getName).toArray(String[]::new);
             } else {
-                return new String[] { authentication.getSourceRealm().getName() };
+                return new String[] { authentication.getEffectiveSubject().getRealm().getName() };
             }
         }
     }
@@ -1351,7 +1342,7 @@ public class ApiKeyService {
         if (authentication.isApiKey()) {
             return (String) authentication.getMetadata().get(AuthenticationField.API_KEY_CREATOR_REALM_TYPE);
         } else {
-            return authentication.getSourceRealm().getType();
+            return authentication.getEffectiveSubject().getRealm().getType();
         }
     }
 
@@ -1367,7 +1358,7 @@ public class ApiKeyService {
                 "authentication realm must be ["
                     + AuthenticationField.API_KEY_REALM_TYPE
                     + "], got ["
-                    + authentication.getAuthenticatedBy().getType()
+                    + authentication.getAuthenticatingSubject().getRealm().getType()
                     + "]"
             );
         }

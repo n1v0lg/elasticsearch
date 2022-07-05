@@ -384,6 +384,19 @@ public class ApiKeyService {
 
             validateCurrentApiKeyDocForUpdate(apiKeyId, authentication, versionedDoc.doc());
 
+            final ApiKeyDoc newDoc = merge(
+                versionedDoc.doc,
+                authentication,
+                userRoles,
+                request.getRoleDescriptors(),
+                request.getMetadata()
+            );
+            // Update is a no-op, no need to execute
+            if (newDoc.equals(versionedDoc.doc())) {
+                listener.onResponse(new UpdateApiKeyResponse(false));
+                return;
+            }
+
             executeBulkRequest(
                 buildBulkRequestForUpdate(versionedDoc, authentication, request, userRoles),
                 ActionListener.wrap(bulkResponse -> translateResponseAndClearCache(apiKeyId, bulkResponse, listener), listener::onFailure)
@@ -438,6 +451,29 @@ public class ApiKeyService {
         addCreator(builder, authentication);
 
         return builder.endObject();
+    }
+
+    ApiKeyDoc merge(
+        final ApiKeyDoc currentApiKeyDoc,
+        final Authentication authentication,
+        final Set<RoleDescriptor> userRoles,
+        final List<RoleDescriptor> keyRoles,
+        final Map<String, Object> metadata
+    ) {
+        final var version = clusterService.state().nodes().getMinNodeVersion();
+        return new ApiKeyDoc(
+            "api_key",
+            currentApiKeyDoc.creationTime,
+            currentApiKeyDoc.expirationTime,
+            currentApiKeyDoc.invalidated,
+            currentApiKeyDoc.hash,
+            currentApiKeyDoc.name,
+            version.id,
+            currentApiKeyDoc.roleDescriptorsBytes,
+            currentApiKeyDoc.limitedByRoleDescriptorsBytes,
+            currentApiKeyDoc.creator,
+            currentApiKeyDoc.metadataFlattened
+        );
     }
 
     static XContentBuilder buildUpdatedDocument(
@@ -1256,25 +1292,25 @@ public class ApiKeyService {
                 targetDocVersion
             );
         }
-        final var bulkRequestBuilder = client.prepareBulk();
-        bulkRequestBuilder.add(
-            client.prepareIndex(SECURITY_MAIN_ALIAS)
-                .setId(request.getId())
-                .setSource(
-                    buildUpdatedDocument(
-                        versionedDoc.doc(),
-                        authentication,
-                        userRoles,
-                        request.getRoleDescriptors(),
-                        targetDocVersion,
-                        request.getMetadata()
-                    )
-                )
-                .setIfSeqNo(versionedDoc.seqNo())
-                .setIfPrimaryTerm(versionedDoc.primaryTerm())
-                .setOpType(DocWriteRequest.OpType.INDEX)
-                .request()
+
+        final XContentBuilder builder = buildUpdatedDocument(
+            versionedDoc.doc(),
+            authentication,
+            userRoles,
+            request.getRoleDescriptors(),
+            targetDocVersion,
+            request.getMetadata()
         );
+        final IndexRequest indexRequest = client.prepareIndex(SECURITY_MAIN_ALIAS)
+            .setId(request.getId())
+            .setSource(builder)
+            .setIfSeqNo(versionedDoc.seqNo())
+            .setIfPrimaryTerm(versionedDoc.primaryTerm())
+            .setOpType(DocWriteRequest.OpType.INDEX)
+            .request();
+
+        final var bulkRequestBuilder = client.prepareBulk();
+        bulkRequestBuilder.add(indexRequest);
         bulkRequestBuilder.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
         return bulkRequestBuilder.request();
     }
@@ -1745,6 +1781,41 @@ public class ApiKeyService {
 
         static ApiKeyDoc fromXContent(XContentParser parser) {
             return PARSER.apply(parser, null);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            ApiKeyDoc apiKeyDoc = (ApiKeyDoc) o;
+            return creationTime == apiKeyDoc.creationTime
+                && expirationTime == apiKeyDoc.expirationTime
+                && version == apiKeyDoc.version
+                && Objects.equals(docType, apiKeyDoc.docType)
+                && Objects.equals(invalidated, apiKeyDoc.invalidated)
+                && Objects.equals(hash, apiKeyDoc.hash)
+                && Objects.equals(name, apiKeyDoc.name)
+                && Objects.equals(roleDescriptorsBytes, apiKeyDoc.roleDescriptorsBytes)
+                && Objects.equals(limitedByRoleDescriptorsBytes, apiKeyDoc.limitedByRoleDescriptorsBytes)
+                && Objects.equals(creator, apiKeyDoc.creator)
+                && Objects.equals(metadataFlattened, apiKeyDoc.metadataFlattened);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(
+                docType,
+                creationTime,
+                expirationTime,
+                invalidated,
+                hash,
+                name,
+                version,
+                roleDescriptorsBytes,
+                limitedByRoleDescriptorsBytes,
+                creator,
+                metadataFlattened
+            );
         }
     }
 

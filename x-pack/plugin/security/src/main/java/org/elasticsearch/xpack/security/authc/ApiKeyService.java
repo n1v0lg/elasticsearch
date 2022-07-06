@@ -400,7 +400,7 @@ public class ApiKeyService {
             }
 
             executeBulkRequest(
-                buildBulkRequestForUpdate(versionedDoc, authentication, request, userRoles),
+                buildBulkRequestForUpdate(apiKeyId, new VersionedApiKeyDoc(newDoc, versionedDoc.seqNo, versionedDoc.primaryTerm)),
                 ActionListener.wrap(bulkResponse -> translateResponseAndClearCache(apiKeyId, bulkResponse, listener), listener::onFailure)
             );
         }, listener::onFailure));
@@ -502,6 +502,19 @@ public class ApiKeyService {
             metadataFlattened = currentApiKeyDoc.metadataFlattened;
         }
 
+        final Map<String, Object> creator = new HashMap<>();
+        final var user = authentication.getEffectiveSubject().getUser();
+        final var sourceRealm = authentication.getEffectiveSubject().getRealm();
+        creator.put("principal", user.principal());
+        creator.put("full_name", user.fullName());
+        creator.put("email", user.email());
+        creator.put("metadata", user.metadata());
+        creator.put("realm", sourceRealm.getName());
+        creator.put("realm_type", sourceRealm.getType());
+        if (sourceRealm.getDomain() != null) {
+            creator.put("realm_domain", sourceRealm.getDomain());
+        }
+
         return new ApiKeyDoc(
             "api_key",
             currentApiKeyDoc.creationTime,
@@ -512,7 +525,7 @@ public class ApiKeyService {
             version.id,
             roleDescriptorBytes,
             limitedByRoleDescriptors,
-            currentApiKeyDoc.creator,
+            creator,
             metadataFlattened
         );
     }
@@ -1310,6 +1323,21 @@ public class ApiKeyService {
         return elements.iterator().next();
     }
 
+    private BulkRequest buildBulkRequestForUpdate(final String apiKeyId, final VersionedApiKeyDoc versionedDoc) throws IOException {
+        final IndexRequest indexRequest = client.prepareIndex(SECURITY_MAIN_ALIAS)
+            .setId(apiKeyId)
+            .setSource(versionedDoc.doc().toXContent(XContentFactory.jsonBuilder(), null))
+            .setIfSeqNo(versionedDoc.seqNo())
+            .setIfPrimaryTerm(versionedDoc.primaryTerm())
+            .setOpType(DocWriteRequest.OpType.INDEX)
+            .request();
+
+        final var bulkRequestBuilder = client.prepareBulk();
+        bulkRequestBuilder.add(indexRequest);
+        bulkRequestBuilder.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
+        return bulkRequestBuilder.request();
+    }
+
     private BulkRequest buildBulkRequestForUpdate(
         final VersionedApiKeyDoc versionedDoc,
         final Authentication authentication,
@@ -1829,7 +1857,7 @@ public class ApiKeyService {
             );
 
             // TODO does this work?
-            builder.map(creator);
+            builder.field("creator", creator);
 
             return builder.endObject();
         }

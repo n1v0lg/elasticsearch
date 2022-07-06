@@ -390,7 +390,8 @@ public class ApiKeyService {
                 authentication,
                 userRoles,
                 request.getRoleDescriptors(),
-                request.getMetadata()
+                request.getMetadata(),
+                clusterService.state().nodes().getMinNodeVersion()
             );
 
             final boolean isNoop = newDoc.equals(versionedDoc.doc());
@@ -438,55 +439,53 @@ public class ApiKeyService {
         Version version,
         @Nullable Map<String, Object> metadata
     ) throws IOException {
-        final XContentBuilder builder = XContentFactory.jsonBuilder();
-        builder.startObject()
-            .field("doc_type", "api_key")
-            .field("creation_time", created.toEpochMilli())
-            .field("expiration_time", expiration == null ? null : expiration.toEpochMilli())
-            .field("api_key_invalidated", false);
+        // TODO
+        final Map<String, Object> creator = new HashMap<>();
+        final var user = authentication.getEffectiveSubject().getUser();
+        final var sourceRealm = authentication.getEffectiveSubject().getRealm();
+        creator.put("principal", user.principal());
+        creator.put("full_name", user.fullName());
+        creator.put("email", user.email());
+        creator.put("metadata", user.metadata());
+        creator.put("realm", sourceRealm.getName());
+        creator.put("realm_type", sourceRealm.getType());
+        if (sourceRealm.getDomain() != null) {
+            creator.put("realm_domain", sourceRealm.getDomain());
+        }
 
-        addApiKeyHash(builder, apiKeyHashChars);
-        addRoleDescriptors(builder, keyRoles);
-        addLimitedByRoleDescriptors(builder, userRoles);
-
-        builder.field("name", name).field("version", version.id).field("metadata_flattened", metadata);
-        addCreator(builder, authentication);
-
-        return builder.endObject();
+        return new ApiKeyDoc(
+            "api_key",
+            created.toEpochMilli(),
+            expiration == null ? -1 : expiration.toEpochMilli(),
+            false,
+            // TODO
+            new String(apiKeyHashChars),
+            name,
+            version.id,
+            roleDescriptorsToBytes(keyRoles),
+            roleDescriptorsToBytes(userRoles),
+            creator,
+            BytesReference.bytes(XContentFactory.jsonBuilder().map(metadata))
+        ).toXContent(XContentFactory.jsonBuilder(), null);
     }
 
-    ApiKeyDoc merge(
+    static ApiKeyDoc merge(
         final ApiKeyDoc currentApiKeyDoc,
         final Authentication authentication,
         final Set<RoleDescriptor> userRoles,
         final List<RoleDescriptor> keyRoles,
-        final Map<String, Object> metadata
+        final Map<String, Object> metadata,
+        final Version version
     ) throws IOException {
-        final var version = clusterService.state().nodes().getMinNodeVersion();
-
         final BytesReference roleDescriptorBytes;
         if (keyRoles != null) {
             logger.trace(() -> format("Creating API key doc with updated role descriptors [{}]", keyRoles));
-            final XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
-            if (keyRoles.isEmpty() == false) {
-                for (RoleDescriptor descriptor : keyRoles) {
-                    builder.field(descriptor.getName(), (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
-                }
-            }
-            builder.endObject();
-            roleDescriptorBytes = BytesReference.bytes(builder);
+            roleDescriptorBytes = roleDescriptorsToBytes(keyRoles);
         } else {
             roleDescriptorBytes = currentApiKeyDoc.roleDescriptorsBytes;
         }
 
-        final XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
-        if (userRoles.isEmpty() == false) {
-            for (RoleDescriptor descriptor : userRoles) {
-                builder.field(descriptor.getName(), (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
-            }
-        }
-        builder.endObject();
-        final BytesReference limitedByRoleDescriptors = BytesReference.bytes(builder);
+        final BytesReference limitedByRoleDescriptors = roleDescriptorsToBytes(userRoles);
 
         final BytesReference metadataFlattened;
         assert currentApiKeyDoc.metadataFlattened == null
@@ -528,6 +527,17 @@ public class ApiKeyService {
         );
     }
 
+    private static BytesReference roleDescriptorsToBytes(final Collection<RoleDescriptor> keyRoles) throws IOException {
+        final XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
+        if (keyRoles != null) {
+            for (RoleDescriptor descriptor : keyRoles) {
+                builder.field(descriptor.getName(), (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
+            }
+        }
+        builder.endObject();
+        return BytesReference.bytes(builder);
+    }
+
     static XContentBuilder buildUpdatedDocument(
         final ApiKeyDoc currentApiKeyDoc,
         final Authentication authentication,
@@ -536,47 +546,10 @@ public class ApiKeyService {
         final Version version,
         final Map<String, Object> metadata
     ) throws IOException {
-        final XContentBuilder builder = XContentFactory.jsonBuilder();
-        builder.startObject()
-            .field("doc_type", "api_key")
-            .field("creation_time", currentApiKeyDoc.creationTime)
-            .field("expiration_time", currentApiKeyDoc.expirationTime == -1 ? null : currentApiKeyDoc.expirationTime)
-            .field("api_key_invalidated", false);
-
-        addApiKeyHash(builder, currentApiKeyDoc.hash.toCharArray());
-
-        if (keyRoles != null) {
-            logger.trace(() -> format("Building API key doc with updated role descriptors [{}]", keyRoles));
-            addRoleDescriptors(builder, keyRoles);
-        } else {
-            assert currentApiKeyDoc.roleDescriptorsBytes != null;
-            builder.rawField("role_descriptors", currentApiKeyDoc.roleDescriptorsBytes.streamInput(), XContentType.JSON);
-        }
-
-        addLimitedByRoleDescriptors(builder, userRoles);
-
-        builder.field("name", currentApiKeyDoc.name).field("version", version.id);
-
-        assert currentApiKeyDoc.metadataFlattened == null
-            || MetadataUtils.containsReservedMetadata(
-                XContentHelper.convertToMap(currentApiKeyDoc.metadataFlattened, false, XContentType.JSON).v2()
-            ) == false : "API key doc to be updated contains reserved metadata";
-        if (metadata != null) {
-            logger.trace(() -> format("Building API key doc with updated metadata [{}]", metadata));
-            builder.field("metadata_flattened", metadata);
-        } else {
-            builder.rawField(
-                "metadata_flattened",
-                currentApiKeyDoc.metadataFlattened == null
-                    ? ApiKeyDoc.NULL_BYTES.streamInput()
-                    : currentApiKeyDoc.metadataFlattened.streamInput(),
-                XContentType.JSON
-            );
-        }
-
-        addCreator(builder, authentication);
-
-        return builder.endObject();
+        return merge(currentApiKeyDoc, authentication, userRoles, keyRoles, metadata, version).toXContent(
+            XContentFactory.jsonBuilder(),
+            null
+        );
     }
 
     void tryAuthenticate(ThreadContext ctx, ApiKeyCredentials credentials, ActionListener<AuthenticationResult<User>> listener) {
@@ -1322,30 +1295,9 @@ public class ApiKeyService {
     }
 
     private BulkRequest buildBulkRequestForUpdate(final String apiKeyId, final VersionedApiKeyDoc versionedDoc) throws IOException {
-        final IndexRequest indexRequest = client.prepareIndex(SECURITY_MAIN_ALIAS)
-            .setId(apiKeyId)
-            // TODO?
-            .setSource(versionedDoc.doc().toXContent(XContentFactory.jsonBuilder(), null))
-            .setIfSeqNo(versionedDoc.seqNo())
-            .setIfPrimaryTerm(versionedDoc.primaryTerm())
-            .setOpType(DocWriteRequest.OpType.INDEX)
-            .request();
-
-        final var bulkRequestBuilder = client.prepareBulk();
-        bulkRequestBuilder.add(indexRequest);
-        bulkRequestBuilder.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
-        return bulkRequestBuilder.request();
-    }
-
-    private BulkRequest buildBulkRequestForUpdate(
-        final VersionedApiKeyDoc versionedDoc,
-        final Authentication authentication,
-        final UpdateApiKeyRequest request,
-        final Set<RoleDescriptor> userRoles
-    ) throws IOException {
         logger.trace(
             "Building update request for API key doc [{}] with seqNo [{}] and primaryTerm [{}]",
-            request.getId(),
+            apiKeyId,
             versionedDoc.seqNo(),
             versionedDoc.primaryTerm()
         );
@@ -1353,25 +1305,12 @@ public class ApiKeyService {
         final var targetDocVersion = clusterService.state().nodes().getMinNodeVersion();
         assert currentDocVersion.onOrBefore(targetDocVersion) : "current API key doc version must be on or before target version";
         if (currentDocVersion.before(targetDocVersion)) {
-            logger.debug(
-                "API key update for [{}] will update version from [{}] to [{}]",
-                request.getId(),
-                currentDocVersion,
-                targetDocVersion
-            );
+            logger.debug("API key update for [{}] will update version from [{}] to [{}]", apiKeyId, currentDocVersion, targetDocVersion);
         }
 
-        final XContentBuilder builder = buildUpdatedDocument(
-            versionedDoc.doc(),
-            authentication,
-            userRoles,
-            request.getRoleDescriptors(),
-            targetDocVersion,
-            request.getMetadata()
-        );
         final IndexRequest indexRequest = client.prepareIndex(SECURITY_MAIN_ALIAS)
-            .setId(request.getId())
-            .setSource(builder)
+            .setId(apiKeyId)
+            .setSource(versionedDoc.doc().toXContent(XContentFactory.jsonBuilder(), null))
             .setIfSeqNo(versionedDoc.seqNo())
             .setIfPrimaryTerm(versionedDoc.primaryTerm())
             .setOpType(DocWriteRequest.OpType.INDEX)
@@ -1845,15 +1784,15 @@ public class ApiKeyService {
                 }
             }
 
-            builder.rawField("role_descriptors", roleDescriptorsBytes.streamInput(), XContentType.JSON);
-            builder.rawField("limited_by_role_descriptors", limitedByRoleDescriptorsBytes.streamInput(), XContentType.JSON);
-
-            builder.field("name", name).field("version", version);
-            builder.rawField(
-                "metadata_flattened",
-                metadataFlattened == null ? NULL_BYTES.streamInput() : metadataFlattened.streamInput(),
-                XContentType.JSON
-            );
+            builder.rawField("role_descriptors", roleDescriptorsBytes.streamInput(), XContentType.JSON)
+                .rawField("limited_by_role_descriptors", limitedByRoleDescriptorsBytes.streamInput(), XContentType.JSON)
+                .field("name", name)
+                .field("version", version)
+                .rawField(
+                    "metadata_flattened",
+                    metadataFlattened == null ? NULL_BYTES.streamInput() : metadataFlattened.streamInput(),
+                    XContentType.JSON
+                );
 
             // TODO does this work?
             builder.field("creator", creator);

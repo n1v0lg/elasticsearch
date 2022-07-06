@@ -71,6 +71,7 @@ import org.elasticsearch.xcontent.DeprecationHandler;
 import org.elasticsearch.xcontent.InstantiatingObjectParser;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.ParseField;
+import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
 import org.elasticsearch.xcontent.XContentLocation;
@@ -391,8 +392,9 @@ public class ApiKeyService {
                 request.getRoleDescriptors(),
                 request.getMetadata()
             );
-            // Update is a no-op, no need to execute
-            if (newDoc.equals(versionedDoc.doc())) {
+
+            final boolean isNoop = newDoc.equals(versionedDoc.doc());
+            if (isNoop) {
                 listener.onResponse(new UpdateApiKeyResponse(false));
                 return;
             }
@@ -459,8 +461,47 @@ public class ApiKeyService {
         final Set<RoleDescriptor> userRoles,
         final List<RoleDescriptor> keyRoles,
         final Map<String, Object> metadata
-    ) {
+    ) throws IOException {
         final var version = clusterService.state().nodes().getMinNodeVersion();
+
+        final BytesReference roleDescriptorBytes;
+        if (keyRoles != null) {
+            logger.trace(() -> format("Creating API key doc with updated role descriptors [{}]", keyRoles));
+            final XContentBuilder builder = XContentFactory.jsonBuilder();
+            builder.startObject("role_descriptors");
+            if (keyRoles.isEmpty() == false) {
+                for (RoleDescriptor descriptor : keyRoles) {
+                    builder.field(descriptor.getName(), (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
+                }
+            }
+            builder.endObject();
+            roleDescriptorBytes = BytesReference.bytes(builder);
+        } else {
+            roleDescriptorBytes = currentApiKeyDoc.roleDescriptorsBytes;
+        }
+
+        final XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder.startObject("limited_by_role_descriptors");
+        if (userRoles.isEmpty() == false) {
+            for (RoleDescriptor descriptor : userRoles) {
+                builder.field(descriptor.getName(), (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
+            }
+        }
+        builder.endObject();
+        final BytesReference limitedByRoleDescriptors = BytesReference.bytes(builder);
+
+        final BytesReference metadataFlattened;
+        assert currentApiKeyDoc.metadataFlattened == null
+            || MetadataUtils.containsReservedMetadata(
+                XContentHelper.convertToMap(currentApiKeyDoc.metadataFlattened, false, XContentType.JSON).v2()
+            ) == false : "API key doc to be updated contains reserved metadata";
+        if (metadata != null) {
+            logger.trace(() -> format("Creating API key doc with updated metadata [{}]", metadata));
+            metadataFlattened = BytesReference.bytes(XContentFactory.jsonBuilder().map(metadata));
+        } else {
+            metadataFlattened = currentApiKeyDoc.metadataFlattened;
+        }
+
         return new ApiKeyDoc(
             "api_key",
             currentApiKeyDoc.creationTime,
@@ -469,10 +510,10 @@ public class ApiKeyService {
             currentApiKeyDoc.hash,
             currentApiKeyDoc.name,
             version.id,
-            currentApiKeyDoc.roleDescriptorsBytes,
-            currentApiKeyDoc.limitedByRoleDescriptorsBytes,
+            roleDescriptorBytes,
+            limitedByRoleDescriptors,
             currentApiKeyDoc.creator,
-            currentApiKeyDoc.metadataFlattened
+            metadataFlattened
         );
     }
 
@@ -1694,10 +1735,23 @@ public class ApiKeyService {
         }
     }
 
-    public static final class ApiKeyDoc {
+    record ApiKeyDoc(
+        String docType,
+        long creationTime,
+        long expirationTime,
+        Boolean invalidated,
+        String hash,
+        @Nullable String name,
+        int version,
+        BytesReference roleDescriptorsBytes,
+        BytesReference limitedByRoleDescriptorsBytes,
+        Map<String, Object> creator,
+        @Nullable BytesReference metadataFlattened
+    ) implements ToXContentObject {
 
         private static final BytesReference NULL_BYTES = new BytesArray("null");
         static final InstantiatingObjectParser<ApiKeyDoc, Void> PARSER;
+
         static {
             InstantiatingObjectParser.Builder<ApiKeyDoc, Void> builder = InstantiatingObjectParser.builder(
                 "api_key_doc",
@@ -1718,21 +1772,7 @@ public class ApiKeyService {
             PARSER = builder.build();
         }
 
-        final String docType;
-        final long creationTime;
-        final long expirationTime;
-        final Boolean invalidated;
-        final String hash;
-        @Nullable
-        final String name;
-        final int version;
-        final BytesReference roleDescriptorsBytes;
-        final BytesReference limitedByRoleDescriptorsBytes;
-        final Map<String, Object> creator;
-        @Nullable
-        final BytesReference metadataFlattened;
-
-        public ApiKeyDoc(
+        ApiKeyDoc(
             String docType,
             long creationTime,
             long expirationTime,
@@ -1758,6 +1798,42 @@ public class ApiKeyService {
             this.metadataFlattened = NULL_BYTES.equals(metadataFlattened) ? null : metadataFlattened;
         }
 
+        @Override
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            assert builder.contentType() == XContentType.JSON;
+
+            builder.startObject()
+                .field("doc_type", "api_key")
+                .field("creation_time", creationTime)
+                .field("expiration_time", expirationTime == -1 ? null : expirationTime)
+                .field("api_key_invalidated", invalidated);
+
+            byte[] utf8Bytes = null;
+            try {
+                utf8Bytes = CharArrays.toUtf8Bytes(hash.toCharArray());
+                builder.field("api_key_hash").utf8Value(utf8Bytes, 0, utf8Bytes.length);
+            } finally {
+                if (utf8Bytes != null) {
+                    Arrays.fill(utf8Bytes, (byte) 0);
+                }
+            }
+
+            builder.rawField("role_descriptors", roleDescriptorsBytes.streamInput(), XContentType.JSON);
+            builder.rawField("limited_by_role_descriptors", limitedByRoleDescriptorsBytes.streamInput(), XContentType.JSON);
+
+            builder.field("name", name).field("version", version);
+            builder.rawField(
+                "metadata_flattened",
+                metadataFlattened == null ? NULL_BYTES.streamInput() : metadataFlattened.streamInput(),
+                XContentType.JSON
+            );
+
+            // TODO does this work?
+            builder.map(creator);
+
+            return builder.endObject();
+        }
+
         public CachedApiKeyDoc toCachedApiKeyDoc() {
             final MessageDigest digest = MessageDigests.sha256();
             final String roleDescriptorsHash = MessageDigests.toHexString(MessageDigests.digest(roleDescriptorsBytes, digest));
@@ -1781,41 +1857,6 @@ public class ApiKeyService {
 
         static ApiKeyDoc fromXContent(XContentParser parser) {
             return PARSER.apply(parser, null);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            ApiKeyDoc apiKeyDoc = (ApiKeyDoc) o;
-            return creationTime == apiKeyDoc.creationTime
-                && expirationTime == apiKeyDoc.expirationTime
-                && version == apiKeyDoc.version
-                && Objects.equals(docType, apiKeyDoc.docType)
-                && Objects.equals(invalidated, apiKeyDoc.invalidated)
-                && Objects.equals(hash, apiKeyDoc.hash)
-                && Objects.equals(name, apiKeyDoc.name)
-                && Objects.equals(roleDescriptorsBytes, apiKeyDoc.roleDescriptorsBytes)
-                && Objects.equals(limitedByRoleDescriptorsBytes, apiKeyDoc.limitedByRoleDescriptorsBytes)
-                && Objects.equals(creator, apiKeyDoc.creator)
-                && Objects.equals(metadataFlattened, apiKeyDoc.metadataFlattened);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(
-                docType,
-                creationTime,
-                expirationTime,
-                invalidated,
-                hash,
-                name,
-                version,
-                roleDescriptorsBytes,
-                limitedByRoleDescriptorsBytes,
-                creator,
-                metadataFlattened
-            );
         }
     }
 

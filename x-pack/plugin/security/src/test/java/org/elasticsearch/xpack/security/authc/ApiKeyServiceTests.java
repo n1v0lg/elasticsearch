@@ -626,10 +626,10 @@ public class ApiKeyServiceTests extends ESTestCase {
         assertThat(result.getValue().email(), is("test@user.com"));
         assertThat(result.getValue().roles(), is(emptyArray()));
         assertThat(result.getValue().metadata(), is(Collections.emptyMap()));
-        assertThat(result.getMetadata().get(AuthenticationField.API_KEY_ROLE_DESCRIPTORS_KEY), equalTo(apiKeyDoc.roleDescriptorsBytes));
+        assertThat(result.getMetadata().get(AuthenticationField.API_KEY_ROLE_DESCRIPTORS_KEY), equalTo(apiKeyDoc.roleDescriptorsBytes()));
         assertThat(
             result.getMetadata().get(AuthenticationField.API_KEY_LIMITED_ROLE_DESCRIPTORS_KEY),
-            equalTo(apiKeyDoc.limitedByRoleDescriptorsBytes)
+            equalTo(apiKeyDoc.limitedByRoleDescriptorsBytes())
         );
         assertThat(result.getMetadata().get(AuthenticationField.API_KEY_CREATOR_REALM_NAME), is("realm1"));
 
@@ -650,10 +650,10 @@ public class ApiKeyServiceTests extends ESTestCase {
         assertThat(result.getValue().email(), is("test@user.com"));
         assertThat(result.getValue().roles(), is(emptyArray()));
         assertThat(result.getValue().metadata(), is(Collections.emptyMap()));
-        assertThat(result.getMetadata().get(AuthenticationField.API_KEY_ROLE_DESCRIPTORS_KEY), equalTo(apiKeyDoc.roleDescriptorsBytes));
+        assertThat(result.getMetadata().get(AuthenticationField.API_KEY_ROLE_DESCRIPTORS_KEY), equalTo(apiKeyDoc.roleDescriptorsBytes()));
         assertThat(
             result.getMetadata().get(AuthenticationField.API_KEY_LIMITED_ROLE_DESCRIPTORS_KEY),
-            equalTo(apiKeyDoc.limitedByRoleDescriptorsBytes)
+            equalTo(apiKeyDoc.limitedByRoleDescriptorsBytes())
         );
         assertThat(result.getMetadata().get(AuthenticationField.API_KEY_CREATOR_REALM_NAME), is("realm1"));
 
@@ -1623,19 +1623,19 @@ public class ApiKeyServiceTests extends ESTestCase {
                 XContentType.JSON
             )
         );
-        assertEquals("api_key", apiKeyDoc.docType);
-        assertEquals(1591919944598L, apiKeyDoc.creationTime);
-        assertEquals(1591919944599L, apiKeyDoc.expirationTime);
-        assertFalse(apiKeyDoc.invalidated);
-        assertEquals("{PBKDF2}10000$abc", apiKeyDoc.hash);
-        assertEquals("key-1", apiKeyDoc.name);
-        assertEquals(7000099, apiKeyDoc.version);
+        assertEquals("api_key", apiKeyDoc.docType());
+        assertEquals(1591919944598L, apiKeyDoc.creationTime());
+        assertEquals(1591919944599L, apiKeyDoc.expirationTime());
+        assertFalse(apiKeyDoc.invalidated());
+        assertEquals("{PBKDF2}10000$abc", apiKeyDoc.hash());
+        assertEquals("key-1", apiKeyDoc.name());
+        assertEquals(7000099, apiKeyDoc.version());
         assertEquals(new BytesArray("""
-            {"a":{"cluster":["all"]}}"""), apiKeyDoc.roleDescriptorsBytes);
+            {"a":{"cluster":["all"]}}"""), apiKeyDoc.roleDescriptorsBytes());
         assertEquals(new BytesArray("""
-            {"limited_by":{"cluster":["all"],"metadata":{"_reserved":true},"type":"role"}}"""), apiKeyDoc.limitedByRoleDescriptorsBytes);
+            {"limited_by":{"cluster":["all"],"metadata":{"_reserved":true},"type":"role"}}"""), apiKeyDoc.limitedByRoleDescriptorsBytes());
 
-        final Map<String, Object> creator = apiKeyDoc.creator;
+        final Map<String, Object> creator = apiKeyDoc.creator();
         assertEquals("admin", creator.get("principal"));
         assertEquals("file1", creator.get("realm"));
         assertEquals("file", creator.get("realm_type"));
@@ -1705,17 +1705,17 @@ public class ApiKeyServiceTests extends ESTestCase {
             XContentHelper.createParser(XContentParserConfiguration.EMPTY, BytesReference.bytes(keyDocSource), XContentType.JSON)
         );
 
-        assertEquals(oldApiKeyDoc.docType, updatedApiKeyDoc.docType);
-        assertEquals(oldApiKeyDoc.name, updatedApiKeyDoc.name);
-        assertEquals(oldApiKeyDoc.hash, updatedApiKeyDoc.hash);
-        assertEquals(oldApiKeyDoc.expirationTime, updatedApiKeyDoc.expirationTime);
-        assertEquals(oldApiKeyDoc.creationTime, updatedApiKeyDoc.creationTime);
-        assertEquals(oldApiKeyDoc.invalidated, updatedApiKeyDoc.invalidated);
+        assertEquals(oldApiKeyDoc.docType(), updatedApiKeyDoc.docType());
+        assertEquals(oldApiKeyDoc.name(), updatedApiKeyDoc.name());
+        assertEquals(oldApiKeyDoc.hash(), updatedApiKeyDoc.hash());
+        assertEquals(oldApiKeyDoc.expirationTime(), updatedApiKeyDoc.expirationTime());
+        assertEquals(oldApiKeyDoc.creationTime(), updatedApiKeyDoc.creationTime());
+        assertEquals(oldApiKeyDoc.invalidated(), updatedApiKeyDoc.invalidated());
 
         final var service = createApiKeyService(Settings.EMPTY);
         final var actualUserRoles = service.parseRoleDescriptorsBytes(
             "",
-            updatedApiKeyDoc.limitedByRoleDescriptorsBytes,
+            updatedApiKeyDoc.limitedByRoleDescriptorsBytes(),
             RoleReference.ApiKeyRoleType.LIMITED_BY
         );
         assertEquals(newUserRoles.size(), actualUserRoles.size());
@@ -1723,12 +1723,12 @@ public class ApiKeyServiceTests extends ESTestCase {
 
         final var actualKeyRoles = service.parseRoleDescriptorsBytes(
             "",
-            updatedApiKeyDoc.roleDescriptorsBytes,
+            updatedApiKeyDoc.roleDescriptorsBytes(),
             RoleReference.ApiKeyRoleType.ASSIGNED
         );
         if (nullKeyRoles) {
             assertEquals(
-                service.parseRoleDescriptorsBytes("", oldApiKeyDoc.roleDescriptorsBytes, RoleReference.ApiKeyRoleType.ASSIGNED),
+                service.parseRoleDescriptorsBytes("", oldApiKeyDoc.roleDescriptorsBytes(), RoleReference.ApiKeyRoleType.ASSIGNED),
                 actualKeyRoles
             );
         } else {
@@ -1736,24 +1736,27 @@ public class ApiKeyServiceTests extends ESTestCase {
             assertEquals(new HashSet<>(newKeyRoles), new HashSet<>(actualKeyRoles));
         }
         if (metadata == null) {
-            assertEquals(oldApiKeyDoc.metadataFlattened, updatedApiKeyDoc.metadataFlattened);
+            assertEquals(oldApiKeyDoc.metadataFlattened(), updatedApiKeyDoc.metadataFlattened());
         } else {
-            assertEquals(metadata, XContentHelper.convertToMap(updatedApiKeyDoc.metadataFlattened, true, XContentType.JSON).v2());
+            assertEquals(metadata, XContentHelper.convertToMap(updatedApiKeyDoc.metadataFlattened(), true, XContentType.JSON).v2());
         }
 
-        assertEquals(authentication.getEffectiveSubject().getUser().principal(), updatedApiKeyDoc.creator.getOrDefault("principal", null));
-        assertEquals(authentication.getEffectiveSubject().getUser().fullName(), updatedApiKeyDoc.creator.getOrDefault("fullName", null));
-        assertEquals(authentication.getEffectiveSubject().getUser().email(), updatedApiKeyDoc.creator.getOrDefault("email", null));
-        assertEquals(authentication.getEffectiveSubject().getUser().metadata(), updatedApiKeyDoc.creator.getOrDefault("metadata", null));
+        assertEquals(
+            authentication.getEffectiveSubject().getUser().principal(),
+            updatedApiKeyDoc.creator().getOrDefault("principal", null)
+        );
+        assertEquals(authentication.getEffectiveSubject().getUser().fullName(), updatedApiKeyDoc.creator().getOrDefault("fullName", null));
+        assertEquals(authentication.getEffectiveSubject().getUser().email(), updatedApiKeyDoc.creator().getOrDefault("email", null));
+        assertEquals(authentication.getEffectiveSubject().getUser().metadata(), updatedApiKeyDoc.creator().getOrDefault("metadata", null));
         RealmRef realm = authentication.getEffectiveSubject().getRealm();
-        assertEquals(realm.getName(), updatedApiKeyDoc.creator.getOrDefault("realm", null));
-        assertEquals(realm.getType(), updatedApiKeyDoc.creator.getOrDefault("realm_type", null));
+        assertEquals(realm.getName(), updatedApiKeyDoc.creator().getOrDefault("realm", null));
+        assertEquals(realm.getType(), updatedApiKeyDoc.creator().getOrDefault("realm_type", null));
         if (realm.getDomain() != null) {
             @SuppressWarnings("unchecked")
-            final var actualDomain = (Map<String, Object>) updatedApiKeyDoc.creator.getOrDefault("realm_domain", null);
+            final var actualDomain = (Map<String, Object>) updatedApiKeyDoc.creator().getOrDefault("realm_domain", null);
             assertEquals(realm.getDomain().name(), actualDomain.get("name"));
         } else {
-            assertFalse(updatedApiKeyDoc.creator.containsKey("realm_domain"));
+            assertFalse(updatedApiKeyDoc.creator().containsKey("realm_domain"));
         }
     }
 
@@ -1787,9 +1790,9 @@ public class ApiKeyServiceTests extends ESTestCase {
                 XContentType.JSON
             )
         );
-        assertEquals(-1L, apiKeyDoc.expirationTime);
-        assertNull(apiKeyDoc.name);
-        assertEquals(new BytesArray("{}"), apiKeyDoc.roleDescriptorsBytes);
+        assertEquals(-1L, apiKeyDoc.expirationTime());
+        assertNull(apiKeyDoc.name());
+        assertEquals(new BytesArray("{}"), apiKeyDoc.roleDescriptorsBytes());
     }
 
     public void testGetApiKeyMetadata() throws IOException {

@@ -468,26 +468,24 @@ public class ApiKeyService {
         if (keyRoles != null) {
             logger.trace(() -> format("Creating API key doc with updated role descriptors [{}]", keyRoles));
             final XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
-            builder.startObject("role_descriptors");
             if (keyRoles.isEmpty() == false) {
                 for (RoleDescriptor descriptor : keyRoles) {
                     builder.field(descriptor.getName(), (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
                 }
             }
-            builder.endObject().endObject();
+            builder.endObject();
             roleDescriptorBytes = BytesReference.bytes(builder);
         } else {
             roleDescriptorBytes = currentApiKeyDoc.roleDescriptorsBytes;
         }
 
         final XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
-        builder.startObject("limited_by_role_descriptors");
         if (userRoles.isEmpty() == false) {
             for (RoleDescriptor descriptor : userRoles) {
                 builder.field(descriptor.getName(), (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
             }
         }
-        builder.endObject().endObject();
+        builder.endObject();
         final BytesReference limitedByRoleDescriptors = BytesReference.bytes(builder);
 
         final BytesReference metadataFlattened;
@@ -1326,6 +1324,7 @@ public class ApiKeyService {
     private BulkRequest buildBulkRequestForUpdate(final String apiKeyId, final VersionedApiKeyDoc versionedDoc) throws IOException {
         final IndexRequest indexRequest = client.prepareIndex(SECURITY_MAIN_ALIAS)
             .setId(apiKeyId)
+            // TODO?
             .setSource(versionedDoc.doc().toXContent(XContentFactory.jsonBuilder(), null))
             .setIfSeqNo(versionedDoc.seqNo())
             .setIfPrimaryTerm(versionedDoc.primaryTerm())

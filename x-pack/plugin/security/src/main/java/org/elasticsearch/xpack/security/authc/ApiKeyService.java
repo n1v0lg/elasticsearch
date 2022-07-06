@@ -1792,10 +1792,8 @@ public class ApiKeyService {
                     "metadata_flattened",
                     metadataFlattened == null ? NULL_BYTES.streamInput() : metadataFlattened.streamInput(),
                     XContentType.JSON
-                );
-
-            // TODO does this work?
-            builder.field("creator", creator);
+                )
+                .field("creator", creator);
 
             return builder.endObject();
         }

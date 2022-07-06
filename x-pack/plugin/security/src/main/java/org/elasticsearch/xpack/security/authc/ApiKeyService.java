@@ -487,11 +487,11 @@ public class ApiKeyService {
 
         final BytesReference limitedByRoleDescriptors = roleDescriptorsToBytes(userRoles);
 
-        final BytesReference metadataFlattened;
         assert currentApiKeyDoc.metadataFlattened == null
             || MetadataUtils.containsReservedMetadata(
                 XContentHelper.convertToMap(currentApiKeyDoc.metadataFlattened, false, XContentType.JSON).v2()
             ) == false : "API key doc to be updated contains reserved metadata";
+        final BytesReference metadataFlattened;
         if (metadata != null) {
             logger.trace(() -> format("Creating API key doc with updated metadata [{}]", metadata));
             metadataFlattened = BytesReference.bytes(XContentFactory.jsonBuilder().map(metadata));
@@ -527,10 +527,10 @@ public class ApiKeyService {
         );
     }
 
-    private static BytesReference roleDescriptorsToBytes(final Collection<RoleDescriptor> keyRoles) throws IOException {
+    private static BytesReference roleDescriptorsToBytes(final Collection<RoleDescriptor> roleDescriptors) throws IOException {
         final XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
-        if (keyRoles != null) {
-            for (RoleDescriptor descriptor : keyRoles) {
+        if (roleDescriptors != null) {
+            for (RoleDescriptor descriptor : roleDescriptors) {
                 builder.field(descriptor.getName(), (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
             }
         }
@@ -1308,16 +1308,16 @@ public class ApiKeyService {
             logger.debug("API key update for [{}] will update version from [{}] to [{}]", apiKeyId, currentDocVersion, targetDocVersion);
         }
 
-        final IndexRequest indexRequest = client.prepareIndex(SECURITY_MAIN_ALIAS)
-            .setId(apiKeyId)
-            .setSource(versionedDoc.doc().toXContent(XContentFactory.jsonBuilder(), null))
-            .setIfSeqNo(versionedDoc.seqNo())
-            .setIfPrimaryTerm(versionedDoc.primaryTerm())
-            .setOpType(DocWriteRequest.OpType.INDEX)
-            .request();
-
         final var bulkRequestBuilder = client.prepareBulk();
-        bulkRequestBuilder.add(indexRequest);
+        bulkRequestBuilder.add(
+            client.prepareIndex(SECURITY_MAIN_ALIAS)
+                .setId(apiKeyId)
+                .setSource(versionedDoc.doc().toXContent(XContentFactory.jsonBuilder(), null))
+                .setIfSeqNo(versionedDoc.seqNo())
+                .setIfPrimaryTerm(versionedDoc.primaryTerm())
+                .setOpType(DocWriteRequest.OpType.INDEX)
+                .request()
+        );
         bulkRequestBuilder.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
         return bulkRequestBuilder.request();
     }

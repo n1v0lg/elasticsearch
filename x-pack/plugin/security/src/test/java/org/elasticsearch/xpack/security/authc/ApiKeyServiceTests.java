@@ -59,6 +59,7 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.ToXContent;
 import org.elasticsearch.xcontent.XContentBuilder;
+import org.elasticsearch.xcontent.XContentFactory;
 import org.elasticsearch.xcontent.XContentParserConfiguration;
 import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xcontent.json.JsonXContent;
@@ -1686,7 +1687,7 @@ public class ApiKeyServiceTests extends ESTestCase {
         );
         final Set<RoleDescriptor> oldUserRoles = randomSet(0, 3, RoleDescriptorTests::randomRoleDescriptor);
         final List<RoleDescriptor> oldKeyRoles = randomList(3, RoleDescriptorTests::randomRoleDescriptor);
-        final Map<String, Object> oldMetadata = ApiKeyTests.randomMetadata();
+        final Map<String, Object> oldMetadata = null;
         final Version oldVersion = VersionUtils.randomVersion(random());
         final ApiKeyDoc oldApiKeyDoc = ApiKeyDoc.fromXContent(
             XContentHelper.createParser(
@@ -1744,7 +1745,12 @@ public class ApiKeyServiceTests extends ESTestCase {
             newUserRoles
         );
 
-        final boolean noop = (changeCreator || changeMetadata || changeKeyRoles || changeUserRoles || changeVersion) == false;
+        final boolean noop = (changeCreator
+            || changeMetadata
+            || changeKeyRoles
+            || changeUserRoles
+            || changeVersion
+            || oldMetadata == null) == false;
         if (noop) {
             assertNull(builder);
         } else {
@@ -1779,10 +1785,12 @@ public class ApiKeyServiceTests extends ESTestCase {
                 assertEquals(newKeyRoles.size(), actualKeyRoles.size());
                 assertEquals(new HashSet<>(newKeyRoles), new HashSet<>(actualKeyRoles));
             }
-            if (changeMetadata == false) {
-                assertEquals(oldApiKeyDoc.metadataFlattened, updatedApiKeyDoc.metadataFlattened);
-            } else {
+            if (changeMetadata) {
                 assertEquals(newMetadata, XContentHelper.convertToMap(updatedApiKeyDoc.metadataFlattened, true, XContentType.JSON).v2());
+            } else if (oldMetadata == null) {
+                assertEquals(BytesReference.bytes(XContentFactory.jsonBuilder().map(Map.of())), updatedApiKeyDoc.metadataFlattened);
+            } else {
+                assertEquals(oldApiKeyDoc.metadataFlattened, updatedApiKeyDoc.metadataFlattened);
             }
             assertEquals(newAuthentication.getEffectiveSubject().getUser().principal(), updatedApiKeyDoc.creator.get("principal"));
             assertEquals(newAuthentication.getEffectiveSubject().getUser().fullName(), updatedApiKeyDoc.creator.get("full_name"));

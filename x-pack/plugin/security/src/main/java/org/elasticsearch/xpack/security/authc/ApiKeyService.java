@@ -486,14 +486,11 @@ public class ApiKeyService {
         if (metadata != null) {
             logger.trace(() -> format("Building API key doc with updated metadata [{}]", metadata));
             builder.field("metadata_flattened", metadata);
+        } else if (currentApiKeyDoc.metadataFlattened == null) {
+            logger.debug("Building API key doc with auto-updated `null` metadata field");
+            builder.field("metadata_flattened", Map.of());
         } else {
-            builder.rawField(
-                "metadata_flattened",
-                currentApiKeyDoc.metadataFlattened == null
-                    ? ApiKeyDoc.NULL_BYTES.streamInput()
-                    : currentApiKeyDoc.metadataFlattened.streamInput(),
-                XContentType.JSON
-            );
+            builder.rawField("metadata_flattened", currentApiKeyDoc.metadataFlattened.streamInput(), XContentType.JSON);
         }
 
         addCreator(builder, authentication);
@@ -543,11 +540,13 @@ public class ApiKeyService {
             }
         }
 
+        // `null` current metadata implies we have a legacy API key, and we need to auto-update the metadata field from `null` to an empty
+        // map. Therefore, this case is never a noop.
+        if (apiKeyDoc.metadataFlattened == null) {
+            return false;
+        }
         final Map<String, Object> newMetadata = request.getMetadata();
         if (newMetadata != null) {
-            if (apiKeyDoc.metadataFlattened == null) {
-                return false;
-            }
             final Map<String, Object> currentMetadata = XContentHelper.convertToMap(apiKeyDoc.metadataFlattened, false, XContentType.JSON)
                 .v2();
             if (newMetadata.equals(currentMetadata) == false) {

@@ -1687,7 +1687,7 @@ public class ApiKeyServiceTests extends ESTestCase {
         );
         final Set<RoleDescriptor> oldUserRoles = randomSet(0, 3, RoleDescriptorTests::randomRoleDescriptor);
         final List<RoleDescriptor> oldKeyRoles = randomList(3, RoleDescriptorTests::randomRoleDescriptor);
-        final Map<String, Object> oldMetadata = null;
+        final Map<String, Object> oldMetadata = ApiKeyTests.randomMetadata();
         final Version oldVersion = VersionUtils.randomVersion(random());
         final ApiKeyDoc oldApiKeyDoc = ApiKeyDoc.fromXContent(
             XContentHelper.createParser(
@@ -1745,12 +1745,13 @@ public class ApiKeyServiceTests extends ESTestCase {
             newUserRoles
         );
 
+        final boolean autoUpdateLegacyMetadata = oldMetadata == null;
         final boolean noop = (changeCreator
             || changeMetadata
             || changeKeyRoles
             || changeUserRoles
             || changeVersion
-            || oldMetadata == null) == false;
+            || autoUpdateLegacyMetadata) == false;
         if (noop) {
             assertNull(builder);
         } else {
@@ -1787,7 +1788,7 @@ public class ApiKeyServiceTests extends ESTestCase {
             }
             if (changeMetadata) {
                 assertEquals(newMetadata, XContentHelper.convertToMap(updatedApiKeyDoc.metadataFlattened, true, XContentType.JSON).v2());
-            } else if (oldMetadata == null) {
+            } else if (autoUpdateLegacyMetadata) {
                 assertEquals(BytesReference.bytes(XContentFactory.jsonBuilder().map(Map.of())), updatedApiKeyDoc.metadataFlattened);
             } else {
                 assertEquals(oldApiKeyDoc.metadataFlattened, updatedApiKeyDoc.metadataFlattened);

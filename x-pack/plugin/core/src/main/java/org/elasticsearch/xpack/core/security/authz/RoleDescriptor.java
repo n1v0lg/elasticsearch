@@ -22,6 +22,7 @@ import org.elasticsearch.core.Tuple;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.ObjectParser;
 import org.elasticsearch.xcontent.ParseField;
+import org.elasticsearch.xcontent.ToXContentFragment;
 import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentParser;
@@ -548,7 +549,7 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
     private static IndicesPrivileges parseIndex(String roleName, XContentParser parser, boolean allow2xFormat) throws IOException {
         final var parsed = parseIndexWithOptionalRemoteClusters(roleName, parser, allow2xFormat, false);
         assert parsed.v2() == null : "indices privileges cannot have remote clusters";
-        return parsed.v1();
+        return new IndicesPrivileges(parsed.v1());
     }
 
     private static RoleDescriptor.RemoteIndicesPrivileges[] parseRemoteIndices(
@@ -574,7 +575,7 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
 
     private static RemoteIndicesPrivileges parseRemoteIndex(String roleName, XContentParser parser, boolean allow2xFormat)
         throws IOException {
-        final Tuple<IndicesPrivileges, String[]> parsed = parseIndexWithOptionalRemoteClusters(roleName, parser, allow2xFormat, true);
+        final var parsed = parseIndexWithOptionalRemoteClusters(roleName, parser, allow2xFormat, true);
         if (parsed.v2() == null) {
             throw new ElasticsearchParseException(
                 "failed to parse remote indices privileges for role [{}]. missing required [{}] field",
@@ -585,7 +586,7 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
         return new RemoteIndicesPrivileges(parsed.v1(), parsed.v2());
     }
 
-    private static Tuple<IndicesPrivileges, String[]> parseIndexWithOptionalRemoteClusters(
+    private static Tuple<IndicesPrivilegesBase.Builder<?>, String[]> parseIndexWithOptionalRemoteClusters(
         String roleName,
         XContentParser parser,
         boolean allow2xFormat,
@@ -793,14 +794,13 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
         }
         checkIfExceptFieldsIsSubsetOfGrantedFields(roleName, grantedFields, deniedFields);
         return new Tuple<>(
-            IndicesPrivileges.builder()
+            IndicesPrivilegesBase.builder()
                 .indices(names)
                 .privileges(privileges)
                 .grantedFields(grantedFields)
                 .deniedFields(deniedFields)
                 .query(query)
-                .allowRestrictedIndices(allowRestrictedIndices)
-                .build(),
+                .allowRestrictedIndices(allowRestrictedIndices),
             remoteClusters
         );
     }
@@ -876,30 +876,34 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
         return builder.build();
     }
 
-    public static final class RemoteIndicesPrivileges implements Writeable, ToXContentObject {
-        private final IndicesPrivileges indicesPrivileges;
+    public static final class RemoteIndicesPrivileges extends IndicesPrivilegesBase {
         private final String[] remoteClusters;
 
-        public RemoteIndicesPrivileges(IndicesPrivileges indicesPrivileges, String... remoteClusters) {
-            this.indicesPrivileges = indicesPrivileges;
-            this.remoteClusters = remoteClusters;
+        public RemoteIndicesPrivileges(StreamInput in) throws IOException {
+            super(in);
+            this.remoteClusters = in.readStringArray();
         }
 
-        public RemoteIndicesPrivileges(StreamInput in) throws IOException {
-            this(new IndicesPrivileges(in), in.readStringArray());
+        private RemoteIndicesPrivileges(Builder builder) {
+            this(builder, builder.remoteClusters);
+        }
+
+        private RemoteIndicesPrivileges(IndicesPrivilegesBase.Builder<?> builder, String... remoteClusters) {
+            super(builder);
+            this.remoteClusters = remoteClusters;
         }
 
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
             builder.startObject();
-            indicesPrivileges.innerToXContent(builder);
+            super.toXContent(builder, params);
             builder.array(Fields.REMOTE_CLUSTERS.getPreferredName(), remoteClusters);
             return builder.endObject();
         }
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
-            indicesPrivileges.writeTo(out);
+            super.writeTo(out);
             out.writeStringArray(remoteClusters);
         }
 
@@ -907,20 +911,24 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
             return new Builder(remoteClusters);
         }
 
+        public String[] remoteClusters() {
+            return remoteClusters;
+        }
+
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
+            if (false == super.equals(o)) return false;
 
             RemoteIndicesPrivileges that = (RemoteIndicesPrivileges) o;
 
-            if (false == indicesPrivileges.equals(that.indicesPrivileges)) return false;
             return Arrays.equals(remoteClusters, that.remoteClusters);
         }
 
         @Override
         public int hashCode() {
-            int result = indicesPrivileges.hashCode();
+            int result = super.hashCode();
             result = 31 * result + Arrays.hashCode(remoteClusters);
             return result;
         }
@@ -928,68 +936,38 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
         @Override
         public String toString() {
             return "RemoteIndicesPrivileges{"
-                + "indicesPrivileges="
-                + indicesPrivileges
-                + ", remoteClusters="
-                + Strings.arrayToCommaDelimitedString(remoteClusters)
+                + "remoteClusters="
+                + Arrays.toString(remoteClusters)
+                + ", indices="
+                + Arrays.toString(getIndices())
+                + ", privileges="
+                + Arrays.toString(getPrivileges())
+                + ", grantedFields="
+                + Arrays.toString(getGrantedFields())
+                + ", deniedFields="
+                + Arrays.toString(getDeniedFields())
+                + ", query="
+                + getQuery()
+                + ", allowRestrictedIndices="
+                + allowRestrictedIndices()
                 + '}';
         }
 
-        public IndicesPrivileges indicesPrivileges() {
-            return indicesPrivileges;
-        }
+        public static class Builder extends IndicesPrivilegesBase.Builder<Builder> {
 
-        public String[] remoteClusters() {
-            return remoteClusters;
-        }
-
-        public static class Builder {
-            private final IndicesPrivileges.Builder indicesBuilder = new IndicesPrivileges.Builder();
             private final String[] remoteClusters;
 
             public Builder(String... remoteClusters) {
                 this.remoteClusters = remoteClusters;
             }
 
-            public Builder indices(String... indices) {
-                indicesBuilder.indices(indices);
-                return this;
-            }
-
-            public Builder privileges(String... privileges) {
-                indicesBuilder.privileges(privileges);
-                return this;
-            }
-
-            public Builder grantedFields(String... grantedFields) {
-                indicesBuilder.grantedFields(grantedFields);
-                return this;
-            }
-
-            public Builder deniedFields(String... deniedFields) {
-                indicesBuilder.deniedFields(deniedFields);
-                return this;
-            }
-
-            public Builder query(@Nullable String query) {
-                return query(query == null ? null : new BytesArray(query));
-            }
-
-            public Builder query(@Nullable BytesReference query) {
-                indicesBuilder.query(query);
-                return this;
-            }
-
-            public Builder allowRestrictedIndices(boolean allow) {
-                indicesBuilder.allowRestrictedIndices(allow);
+            @Override
+            Builder self() {
                 return this;
             }
 
             public RemoteIndicesPrivileges build() {
-                if (remoteClusters == null || remoteClusters.length == 0) {
-                    throw new IllegalArgumentException("remote clusters must refer to at least one cluster alias or cluster alias pattern");
-                }
-                return new RemoteIndicesPrivileges(indicesBuilder.build(), remoteClusters);
+                return new RemoteIndicesPrivileges(this);
             }
         }
     }
@@ -998,23 +976,80 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
      * A class representing permissions for a group of indices mapped to
      * privileges, field permissions, and a query.
      */
-    public static class IndicesPrivileges implements ToXContentObject, Writeable {
+    public static class IndicesPrivileges extends IndicesPrivilegesBase {
 
         private static final IndicesPrivileges[] NONE = new IndicesPrivileges[0];
 
-        private String[] indices;
-        private String[] privileges;
-        private String[] grantedFields = null;
-        private String[] deniedFields = null;
-        private BytesReference query;
+        public IndicesPrivileges(StreamInput in) throws IOException {
+            super(in);
+        }
+
+        private IndicesPrivileges(IndicesPrivilegesBase.Builder<?> builder) {
+            super(builder);
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
+
+        @Override
+        public String toString() {
+            return "IndicesPrivileges{"
+                + "indices="
+                + Arrays.toString(getIndices())
+                + ", privileges="
+                + Arrays.toString(getPrivileges())
+                + ", grantedFields="
+                + Arrays.toString(getGrantedFields())
+                + ", deniedFields="
+                + Arrays.toString(getDeniedFields())
+                + ", query="
+                + getQuery()
+                + ", allowRestrictedIndices="
+                + allowRestrictedIndices()
+                + '}';
+        }
+
+        // TODO equals and hashCode
+
+
+
+        @Override
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            builder.startObject();
+            super.toXContent(builder, params);
+            return builder.endObject();
+        }
+
+        public static void write(StreamOutput out, IndicesPrivileges privileges) throws IOException {
+            privileges.writeTo(out);
+        }
+
+        public static class Builder extends IndicesPrivilegesBase.Builder<Builder> {
+
+            @Override
+            Builder self() {
+                return this;
+            }
+
+            public IndicesPrivileges build() {
+                return new IndicesPrivileges(this);
+            }
+        }
+    }
+
+    public static class IndicesPrivilegesBase implements ToXContentFragment, Writeable {
+        private final String[] indices;
+        private final String[] privileges;
+        private final String[] grantedFields;
+        private final String[] deniedFields;
+        private final BytesReference query;
         // by default certain restricted indices are exempted when granting privileges, as they should generally be hidden for ordinary
         // users. Setting this flag eliminates this special status, and any index name pattern in the permission will cover restricted
         // indices as well.
-        private boolean allowRestrictedIndices = false;
+        private final boolean allowRestrictedIndices;
 
-        private IndicesPrivileges() {}
-
-        public IndicesPrivileges(StreamInput in) throws IOException {
+        public IndicesPrivilegesBase(StreamInput in) throws IOException {
             this.indices = in.readStringArray();
             this.grantedFields = in.readOptionalStringArray();
             this.deniedFields = in.readOptionalStringArray();
@@ -1033,8 +1068,41 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
             out.writeBoolean(allowRestrictedIndices);
         }
 
-        public static Builder builder() {
-            return new Builder();
+        public static Builder<?> builder() {
+            return new BaseBuilder();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            IndicesPrivilegesBase that = (IndicesPrivilegesBase) o;
+
+            if (allowRestrictedIndices != that.allowRestrictedIndices) return false;
+            if (!Arrays.equals(indices, that.indices)) return false;
+            if (!Arrays.equals(privileges, that.privileges)) return false;
+            if (!Arrays.equals(grantedFields, that.grantedFields)) return false;
+            if (!Arrays.equals(deniedFields, that.deniedFields)) return false;
+            return Objects.equals(query, that.query);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = Arrays.hashCode(indices);
+            result = 31 * result + Arrays.hashCode(privileges);
+            result = 31 * result + Arrays.hashCode(grantedFields);
+            result = 31 * result + Arrays.hashCode(deniedFields);
+            result = 31 * result + (query != null ? query.hashCode() : 0);
+            result = 31 * result + (allowRestrictedIndices ? 1 : 0);
+            return result;
+        }
+
+        private static class BaseBuilder extends Builder<BaseBuilder> {
+            @Override
+            protected BaseBuilder self() {
+                return this;
+            }
         }
 
         public String[] getIndices() {
@@ -1089,73 +1157,7 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
         }
 
         @Override
-        public String toString() {
-            StringBuilder sb = new StringBuilder("IndicesPrivileges[");
-            sb.append("indices=[").append(Strings.arrayToCommaDelimitedString(indices));
-            sb.append("], allowRestrictedIndices=[").append(allowRestrictedIndices);
-            sb.append("], privileges=[").append(Strings.arrayToCommaDelimitedString(privileges));
-            sb.append("], ");
-            if (grantedFields != null || deniedFields != null) {
-                sb.append(RoleDescriptor.Fields.FIELD_PERMISSIONS).append("=[");
-                if (grantedFields == null) {
-                    sb.append(RoleDescriptor.Fields.GRANT_FIELDS).append("=null");
-                } else {
-                    sb.append(RoleDescriptor.Fields.GRANT_FIELDS).append("=[").append(Strings.arrayToCommaDelimitedString(grantedFields));
-                    sb.append("]");
-                }
-                if (deniedFields == null) {
-                    sb.append(", ").append(RoleDescriptor.Fields.EXCEPT_FIELDS).append("=null");
-                } else {
-                    sb.append(", ")
-                        .append(RoleDescriptor.Fields.EXCEPT_FIELDS)
-                        .append("=[")
-                        .append(Strings.arrayToCommaDelimitedString(deniedFields));
-                    sb.append("]");
-                }
-                sb.append("]");
-            }
-            if (query != null) {
-                sb.append(", query=");
-                sb.append(query.utf8ToString());
-            }
-            sb.append("]");
-            return sb.toString();
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            IndicesPrivileges that = (IndicesPrivileges) o;
-
-            if (Arrays.equals(indices, that.indices) == false) return false;
-            if (allowRestrictedIndices != that.allowRestrictedIndices) return false;
-            if (Arrays.equals(privileges, that.privileges) == false) return false;
-            if (Arrays.equals(grantedFields, that.grantedFields) == false) return false;
-            if (Arrays.equals(deniedFields, that.deniedFields) == false) return false;
-            return Objects.equals(query, that.query);
-        }
-
-        @Override
-        public int hashCode() {
-            int result = Arrays.hashCode(indices);
-            result = 31 * result + (allowRestrictedIndices ? 1 : 0);
-            result = 31 * result + Arrays.hashCode(privileges);
-            result = 31 * result + Arrays.hashCode(grantedFields);
-            result = 31 * result + Arrays.hashCode(deniedFields);
-            result = 31 * result + (query != null ? query.hashCode() : 0);
-            return result;
-        }
-
-        @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            innerToXContent(builder);
-            return builder.endObject();
-        }
-
-        void innerToXContent(XContentBuilder builder) throws IOException {
             builder.array("names", indices);
             builder.array("privileges", privileges);
             if (grantedFields != null || deniedFields != null) {
@@ -1171,74 +1173,89 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
             if (query != null) {
                 builder.field("query", query.utf8ToString());
             }
-            builder.field(RoleDescriptor.Fields.ALLOW_RESTRICTED_INDICES.getPreferredName(), allowRestrictedIndices);
+            return builder.field(RoleDescriptor.Fields.ALLOW_RESTRICTED_INDICES.getPreferredName(), allowRestrictedIndices);
         }
 
-        public static void write(StreamOutput out, IndicesPrivileges privileges) throws IOException {
-            privileges.writeTo(out);
-        }
+        public abstract static class Builder<T extends Builder<T>> {
 
-        public static class Builder {
-
-            private IndicesPrivileges indicesPrivileges = new IndicesPrivileges();
+            private String[] indices;
+            private String[] privileges;
+            private String[] grantedFields = null;
+            private String[] deniedFields = null;
+            private BytesReference query;
+            // by default certain restricted indices are exempted when granting privileges, as they should generally be hidden for ordinary
+            // users. Setting this flag eliminates this special status, and any index name pattern in the permission will cover restricted
+            // indices as well.
+            private boolean allowRestrictedIndices = false;
 
             private Builder() {}
 
-            public Builder indices(String... indices) {
-                indicesPrivileges.indices = indices;
-                return this;
+            abstract T self();
+
+            public T indices(String... indices) {
+                this.indices = indices;
+                return self();
             }
 
-            public Builder indices(Collection<String> indices) {
+            public T indices(Collection<String> indices) {
                 return indices(indices.toArray(new String[indices.size()]));
             }
 
-            public Builder privileges(String... privileges) {
-                indicesPrivileges.privileges = privileges;
-                return this;
+            public T privileges(String... privileges) {
+                this.privileges = privileges;
+                return self();
             }
 
-            public Builder privileges(Collection<String> privileges) {
+            public T privileges(Collection<String> privileges) {
                 return privileges(privileges.toArray(new String[privileges.size()]));
             }
 
-            public Builder grantedFields(String... grantedFields) {
-                indicesPrivileges.grantedFields = grantedFields;
-                return this;
+            public T grantedFields(String... grantedFields) {
+                this.grantedFields = grantedFields;
+                return self();
             }
 
-            public Builder deniedFields(String... deniedFields) {
-                indicesPrivileges.deniedFields = deniedFields;
-                return this;
+            public T deniedFields(String... deniedFields) {
+                this.deniedFields = deniedFields;
+                return self();
             }
 
-            public Builder query(@Nullable String query) {
+            public T query(@Nullable String query) {
                 return query(query == null ? null : new BytesArray(query));
             }
 
-            public Builder allowRestrictedIndices(boolean allow) {
-                indicesPrivileges.allowRestrictedIndices = allow;
-                return this;
+            public T allowRestrictedIndices(boolean allow) {
+                this.allowRestrictedIndices = allow;
+                return self();
             }
 
-            public Builder query(@Nullable BytesReference query) {
+            public T query(@Nullable BytesReference query) {
                 if (query == null) {
-                    indicesPrivileges.query = null;
+                    this.query = null;
                 } else {
-                    indicesPrivileges.query = query;
+                    this.query = query;
                 }
-                return this;
+                return self();
             }
 
-            public IndicesPrivileges build() {
-                if (indicesPrivileges.indices == null || indicesPrivileges.indices.length == 0) {
+            public IndicesPrivilegesBase build() {
+                if (indices == null || indices.length == 0) {
                     throw new IllegalArgumentException("indices privileges must refer to at least one index name or index name pattern");
                 }
-                if (indicesPrivileges.privileges == null || indicesPrivileges.privileges.length == 0) {
+                if (privileges == null || privileges.length == 0) {
                     throw new IllegalArgumentException("indices privileges must define at least one privilege");
                 }
-                return indicesPrivileges;
+                return new IndicesPrivilegesBase(builder());
             }
+        }
+
+        private IndicesPrivilegesBase(Builder<?> builder) {
+            this.indices = builder.indices;
+            this.grantedFields = builder.grantedFields;
+            this.deniedFields = builder.deniedFields;
+            this.privileges = builder.privileges;
+            this.query = builder.query;
+            this.allowRestrictedIndices = builder.allowRestrictedIndices;
         }
     }
 

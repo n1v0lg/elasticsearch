@@ -623,14 +623,14 @@ public class CompositeRolesStore {
             // if a remote index privilege is an explicit denial, then we treat it as non-existent to stay consistent with local index
             // privileges
             final boolean isExplicitDenial = remoteIndicesPrivileges.length == 1
-                && "none".equalsIgnoreCase(remoteIndicesPrivileges[0].indicesPrivileges().getPrivileges()[0]);
+                && "none".equalsIgnoreCase(remoteIndicesPrivileges[0].getPrivileges()[0]);
             if (isExplicitDenial) {
                 return;
             }
             for (final var remoteIndicesPrivilege : remoteIndicesPrivileges) {
                 final var clusterAlias = newHashSet(remoteIndicesPrivilege.remoteClusters());
                 collatePrivilegesByIndices(
-                    remoteIndicesPrivilege.indicesPrivileges(),
+                    remoteIndicesPrivilege,
                     allowsRestrictedIndices,
                     remoteIndicesPrivilegesMap.computeIfAbsent(clusterAlias, k -> new HashMap<>())
                 );
@@ -655,7 +655,7 @@ public class CompositeRolesStore {
         }
 
         private static void collatePrivilegesByIndices(
-            final IndicesPrivileges indicesPrivilege,
+            final RoleDescriptor.IndicesPrivilegesBase indicesPrivilege,
             final boolean allowsRestrictedIndices,
             final Map<Set<String>, MergeableIndicesPrivilege> indicesPrivilegesMap
         ) {

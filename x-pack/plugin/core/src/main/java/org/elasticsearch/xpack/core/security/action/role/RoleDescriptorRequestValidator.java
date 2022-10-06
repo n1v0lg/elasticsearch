@@ -59,7 +59,7 @@ public class RoleDescriptorRequestValidator {
                     validationException = addValidationError("remote index cluster alias cannot be an empty string", validationException);
                 }
                 try {
-                    IndexPrivilege.get(Set.of(ridp.indicesPrivileges().getPrivileges()));
+                    IndexPrivilege.get(Set.of(ridp.getPrivileges()));
                 } catch (IllegalArgumentException ile) {
                     validationException = addValidationError(ile.getMessage(), validationException);
                 }

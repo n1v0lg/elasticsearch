@@ -28,6 +28,7 @@ import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.user.SystemUser;
 import org.elasticsearch.xpack.security.action.SecurityActionMapper;
 import org.elasticsearch.xpack.security.authc.AuthenticationService;
+import org.elasticsearch.xpack.security.authc.CrossClusterService;
 import org.elasticsearch.xpack.security.authz.AuthorizationService;
 
 /**
@@ -101,6 +102,29 @@ final class ServerTransportFilter {
         }
 
         final Version version = transportChannel.getVersion();
+        // Check thread context for remote access headers, and try to authentication
+        new CrossClusterService(null).authenticate(
+            securityContext.getThreadContext(),
+            action,
+            request,
+            false,
+            ActionListener.wrap((authentication) -> {
+                if (authentication != null) {
+                    if (securityAction.equals(TransportService.HANDSHAKE_ACTION_NAME)
+                        && SystemUser.is(authentication.getEffectiveSubject().getUser()) == false) {
+                        securityContext.executeAsSystemUser(version, original -> {
+                            final Authentication replaced = securityContext.getAuthentication();
+                            authzService.authorize(replaced, securityAction, request, listener);
+                        });
+                    } else {
+                        authzService.authorize(authentication, securityAction, request, listener);
+                    }
+                } else {
+                    listener.onFailure(new IllegalStateException("no authentication present but auth is allowed"));
+                }
+            }, listener::onFailure)
+        );
+
         authcService.authenticate(securityAction, request, true, ActionListener.wrap((authentication) -> {
             if (authentication != null) {
                 if (securityAction.equals(TransportService.HANDSHAKE_ACTION_NAME)

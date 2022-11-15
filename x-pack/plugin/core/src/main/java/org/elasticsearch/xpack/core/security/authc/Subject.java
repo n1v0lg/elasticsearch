@@ -20,8 +20,12 @@ import org.elasticsearch.xpack.core.security.authz.store.RoleReferenceIntersecti
 import org.elasticsearch.xpack.core.security.user.AnonymousUser;
 import org.elasticsearch.xpack.core.security.user.User;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import static org.elasticsearch.xpack.core.security.authc.Authentication.VERSION_API_KEY_ROLES_AS_BYTES;
 import static org.elasticsearch.xpack.core.security.authc.AuthenticationField.API_KEY_LIMITED_ROLE_DESCRIPTORS_KEY;
@@ -233,16 +237,16 @@ public class Subject {
             return null;
         }
         final String fcPrincipal = user.principal();
-        final BytesReference qcRoleDescriptorsBytes = (BytesReference) metadata.get(CROSS_CLUSTER_ROLE_DESCRIPTORS_KEY);
-        if (isEmptyRoleDescriptorsBytes(qcRoleDescriptorsBytes)) {
-            throw new ElasticsearchSecurityException("no role descriptors found for Cross Cluster");
-        }
-        final RoleReference.CrossClusterRoleReference roleDescriptorsReference = new RoleReference.CrossClusterRoleReference(
-            fcPrincipal,
-            fcPrincipal,
-            qcRoleDescriptorsBytes
+        final Collection<Set<BytesReference>> combinedRdBytes = (Collection<Set<BytesReference>>) metadata.get(
+            CROSS_CLUSTER_ROLE_DESCRIPTORS_KEY
         );
-        return new RoleReferenceIntersection(roleDescriptorsReference);
+        final List<RoleReference.CrossClusterRoleReference> references = new ArrayList<>();
+        for (var b : combinedRdBytes) {
+            assert b.size() <= 1;
+            references.add(new RoleReference.CrossClusterRoleReference(fcPrincipal, fcPrincipal, b.iterator().next()));
+        }
+
+        return new RoleReferenceIntersection(references.toArray(new RoleReference[0]));
     }
 
     private static boolean isEmptyRoleDescriptorsBytes(BytesReference roleDescriptorsBytes) {

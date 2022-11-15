@@ -967,7 +967,7 @@ public class ApiKeyService {
      * Gets the API Key from the <code>Authorization</code> header if the header begins with
      * <code>ApiKey </code>
      */
-    ApiKeyCredentials getCredentialsFromHeader(ThreadContext threadContext) {
+    public ApiKeyCredentials getCredentialsFromHeader(ThreadContext threadContext) {
         if (false == isEnabled()) {
             return null;
         }

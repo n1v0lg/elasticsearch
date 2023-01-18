@@ -38,6 +38,7 @@ import static org.hamcrest.Matchers.notNullValue;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, autoManageMasterNodes = false)
 public class FileSettingsRoleMappingsRestartIT extends SecurityIntegTestCase {
+
     private static AtomicLong versionCounter = new AtomicLong(1);
 
     private static String testJSONOnlyRoleMappings = """
@@ -125,6 +126,8 @@ public class FileSettingsRoleMappingsRestartIT extends SecurityIntegTestCase {
 
         logger.info("--> restart master");
         internalCluster().restartNode(masterNode);
+
+        ensureGreen();
 
         var clusterStateResponse = client().admin().cluster().state(new ClusterStateRequest()).actionGet();
         assertThat(

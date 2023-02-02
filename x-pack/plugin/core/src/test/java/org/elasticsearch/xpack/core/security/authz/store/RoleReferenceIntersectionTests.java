@@ -12,6 +12,7 @@ import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.security.authz.permission.LimitedRole;
 import org.elasticsearch.xpack.core.security.authz.permission.Role;
+import org.elasticsearch.xpack.core.security.authz.permission.SimpleRole;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,7 +53,7 @@ public class RoleReferenceIntersectionTests extends ESTestCase {
             when(roleReference.id()).thenReturn(new RoleKey(Set.of(), String.valueOf(i)));
             roleReferences.add(roleReference);
 
-            final Role role = mock(Role.class);
+            final Role role = mock(SimpleRole.class);
             when(role.limitedBy(any())).thenCallRealMethod();
             roles.add(role);
         }

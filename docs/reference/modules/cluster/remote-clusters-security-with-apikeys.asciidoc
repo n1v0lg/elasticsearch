@@ -1,0 +1,40 @@
+[[remote-clusters-security-with-apikey-authentication]]
+=== Configure remote clusters with security
+
+To use {ccr} or {ccs} safely with remote clusters, enable security on all connected clusters, configure the remote transport interface on the remote clusters, secure it with server-side Transport Layer Security (TLS), and set up API-key based authentication between connected clusters.
+Server-side TLS combined with API-key based authentication is minimally required for remote clusters.
+// TODO link to more general TLS instructions?
+For additional security, configure mutual TLS (mTLS) on the remote transport interface as well.
+
+// TODO link to specialized API keys page
+Remote clusters authenticate requests on the remote transport interface using API keys.
+This means your local cluster requires an API key credential issued on the remote cluster to make cross cluster requests.
+You can grant access to specific indices on the remote cluster by assigning the relevant privileges during API key creation.
+This enables granular access control on a per-cluster basis.
+
+User authentication is first performed on the local cluster.
+// TODO link to remote indices privileges page
+The user's remote index privileges are passed to the remote clusters, together with the configured API key credentials.
+A remote cluster authenticates the API key, and combines the user’s index privileges with those of the API key to determine which indices the user is allowed to access.
+
+Before using {ccr} or {ccs} with secured {es} clusters, complete the following configuration tasks:
+
+. Enable the {es} {security-features} on every node in each connected cluster by setting `xpack.security.enabled` to `true` in `elasticsearch.yml`.
+Refer to the <<general-security-settings,{es} security settings>>.
+. Enable the remote transport interface on every node in each remote cluster by setting `remote_cluster_server.enabled` to `true` in `elasticsearch.yml`.
+The default port for this profile is `9400`.
+Use `remote_cluster.port` to specify a different port.
+// TODO need more here
+To secure inbound traffic on the remote transport profile, configure server-side Transport Layer Security (TLS) on the nodes of the remote clusters.
+. Create an API key with the desired index privileges on each remote cluster.
+// TODO link here to detailed instructions
+. Configure your local cluster to use the designated API keys as the authentication credentials for its remote connections.
+
+After enabling and configuring security, you can
+<<remote-clusters-connect,connect remote clusters>> from a local cluster.
+
+With your clusters connected, you'll need to
+<<remote-clusters-privileges,configure users and privileges>> on your local cluster.
+
+If you're configuring a remote cluster for {ccr}, you need to
+<<ccr-getting-started-follower-index,configure a follower index>> on your local cluster to replicate the leader index on a remote cluster.

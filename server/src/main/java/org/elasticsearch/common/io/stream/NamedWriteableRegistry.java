@@ -108,7 +108,7 @@ public class NamedWriteableRegistry {
         @SuppressWarnings("unchecked")
         Writeable.Reader<? extends T> reader = (Writeable.Reader<? extends T>) readers.get(name);
         if (reader == null) {
-            throw new IllegalArgumentException("Unknown NamedWriteable [" + categoryClass.getName() + "][" + name + "]");
+            throw new IllegalArgumentException("Baa baa baa so sad Unknown NamedWriteable [" + categoryClass.getName() + "][" + name + "]");
         }
         return reader;
     }

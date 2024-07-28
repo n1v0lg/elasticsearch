@@ -24,25 +24,24 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 
-/**
- * Emulates the instance metadata service that runs on Azure
- */
 @SuppressForbidden(reason = "Uses a HttpServer to emulate an Azure endpoint")
-public class AzureMetadataServiceHttpHandler implements HttpHandler {
-    private static final Logger logger = LogManager.getLogger(AzureMetadataServiceHttpHandler.class);
+public class AzureOAuth2TokenServiceHttpHandler implements HttpHandler {
+    private static final Logger logger = LogManager.getLogger(AzureOAuth2TokenServiceHttpHandler.class);
 
+    private final String tenantId;
     private final String bearerToken;
 
-    public AzureMetadataServiceHttpHandler(String bearerToken) {
+    public AzureOAuth2TokenServiceHttpHandler(String tenantId, String bearerToken) {
+        this.tenantId = tenantId;
         this.bearerToken = bearerToken;
     }
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        if ("GET".equals(exchange.getRequestMethod())
-            && "/metadata/identity/oauth2/token".equals(exchange.getRequestURI().getPath())
+        if ("POST".equals(exchange.getRequestMethod())
+            && ("/" + tenantId + "/oauth2/v2.0/token").equals(exchange.getRequestURI().getPath())
             && "api-version=2018-02-01&resource=https://storage.azure.com".equals(exchange.getRequestURI().getQuery())) {
-
+            // TODO don't duplicate code with AzureMetadataServiceHttpHandler
             try (exchange; var xcb = XContentBuilder.builder(XContentType.JSON.xContent())) {
                 final var nowSeconds = System.currentTimeMillis() / 1000L;
                 final var validitySeconds = 86400L;
@@ -63,10 +62,6 @@ public class AzureMetadataServiceHttpHandler implements HttpHandler {
                 return;
             }
         }
-        /*else if ("POST".equals(exchange.getRequestMethod())
-                    && ("/" + tenantId + "/oauth2/v2.0/token").equals(exchange.getRequestURI().getPath())) {
-
-        }*/
 
         final var msgBuilder = new StringWriter();
         msgBuilder.append("method: ").append(exchange.getRequestMethod()).append(System.lineSeparator());

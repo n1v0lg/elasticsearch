@@ -38,11 +38,13 @@ public class AzureHttpFixture extends ExternalResource {
 
     private final Protocol protocol;
     private final String account;
+    private final String tenantId;
     private final String container;
     private final Predicate<String> authHeaderPredicate;
 
     private HttpServer server;
     private HttpServer metadataServer;
+    private HttpServer oauth2TokenServiceServer;
 
     public enum Protocol {
         NONE,
@@ -95,9 +97,10 @@ public class AzureHttpFixture extends ExternalResource {
         };
     }
 
-    public AzureHttpFixture(Protocol protocol, String account, String container, Predicate<String> authHeaderPredicate) {
+    public AzureHttpFixture(Protocol protocol, String account, String container, String tenantId, Predicate<String> authHeaderPredicate) {
         this.protocol = protocol;
         this.account = account;
+        this.tenantId = tenantId;
         this.container = container;
         this.authHeaderPredicate = authHeaderPredicate;
     }
@@ -116,6 +119,10 @@ public class AzureHttpFixture extends ExternalResource {
 
     public String getMetadataAddress() {
         return "http://" + metadataServer.getAddress().getHostString() + ":" + metadataServer.getAddress().getPort() + "/";
+    }
+
+    public String getOAuthTokenServiceAddress() {
+        return scheme() + metadataServer.getAddress().getHostString() + ":" + metadataServer.getAddress().getPort() + "/";
     }
 
     @Override
@@ -139,6 +146,8 @@ public class AzureHttpFixture extends ExternalResource {
                 case HTTP -> {
                     server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
                     server.createContext("/" + account, new AzureHttpHandler(account, container, actualAuthHeaderPredicate));
+                    // TODO this should never get called
+                    server.createContext("/" + tenantId, new AzureOAuth2TokenServiceHttpHandler(tenantId, bearerToken));
                     server.start();
                 }
                 case HTTPS -> {
@@ -160,6 +169,7 @@ public class AzureHttpFixture extends ExternalResource {
                     );
                     httpsServer.setHttpsConfigurator(new HttpsConfigurator(sslContext));
                     httpsServer.createContext("/" + account, new AzureHttpHandler(account, container, actualAuthHeaderPredicate));
+                    httpsServer.createContext("/" + tenantId, new AzureOAuth2TokenServiceHttpHandler(tenantId, bearerToken));
                     httpsServer.start();
                 }
             }

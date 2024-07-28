@@ -23,6 +23,8 @@ import static org.hamcrest.Matchers.not;
 public class AzureSnapshotBasedRecoveryIT extends AbstractSnapshotBasedRecoveryRestTestCase {
     private static final boolean USE_FIXTURE = Booleans.parseBoolean(System.getProperty("test.azure.fixture", "true"));
     private static final String AZURE_TEST_ACCOUNT = System.getProperty("test.azure.account");
+    private static final String AZURE_TEST_TENANT_ID = System.getProperty("test.azure.tenant_id");
+
     private static final String AZURE_TEST_CONTAINER = System.getProperty("test.azure.container");
     private static final String AZURE_TEST_KEY = System.getProperty("test.azure.key");
     private static final String AZURE_TEST_SASTOKEN = System.getProperty("test.azure.sas_token");
@@ -30,6 +32,7 @@ public class AzureSnapshotBasedRecoveryIT extends AbstractSnapshotBasedRecoveryR
     private static AzureHttpFixture fixture = new AzureHttpFixture(
         USE_FIXTURE ? AzureHttpFixture.Protocol.HTTPS : AzureHttpFixture.Protocol.NONE,
         AZURE_TEST_ACCOUNT,
+        AZURE_TEST_TENANT_ID,
         AZURE_TEST_CONTAINER,
         AzureHttpFixture.sharedKeyForAccountPredicate(AZURE_TEST_ACCOUNT)
     );

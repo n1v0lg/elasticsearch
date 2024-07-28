@@ -170,7 +170,13 @@ class AzureClientProvider extends AbstractLifecycleComponent {
             .retryOptions(retryOptions);
 
         if (settings.hasCredentials() == false) {
-            builder.credential(new DefaultAzureCredentialBuilder().executorService(eventLoopGroup).build());
+            final DefaultAzureCredentialBuilder credentialBuilder = new DefaultAzureCredentialBuilder().executorService(eventLoopGroup);
+            // TODO make me a setting
+            final boolean disableInstanceDiscovery = true;
+            if (disableInstanceDiscovery) {
+                credentialBuilder.disableInstanceDiscovery();
+            }
+            builder.credential(credentialBuilder.build());
         }
 
         if (successfulRequestConsumer != null) {

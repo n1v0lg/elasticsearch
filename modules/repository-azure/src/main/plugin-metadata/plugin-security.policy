@@ -11,6 +11,8 @@ grant {
   permission java.net.SocketPermission "*", "connect";
   // io.netty.util.concurrent.GlobalEventExecutor.startThread
   permission java.lang.RuntimePermission "setContextClassLoader";
+  // TODO remove me
+  permission java.io.FilePermission "<<ALL FILES>>", "read";
   // Used by jackson bean deserialization
   permission java.lang.RuntimePermission "accessDeclaredMembers";
   permission java.lang.reflect.ReflectPermission "suppressAccessChecks";

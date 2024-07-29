@@ -70,8 +70,8 @@ tasks.named("workloadIdentityJavaRestTest") {
   systemProperty 'test.azure.account', azureAccount
   systemProperty 'test.azure.container', azureContainer
   // TODO
-  systemProperty 'test.azure.tenant_id', "test_tenant_id"
-  systemProperty 'test.azure.client_id', "test_client_id"
+  systemProperty 'test.azure.tenant_id', "test-tenant-id"
+  systemProperty 'test.azure.client_id', "test-client-id"
   // omitting key and sas_token so that we use a bearer token from the oauth token service
   nonInputProperties.systemProperty 'test.azure.base_path', azureBasePath + "_repository_test_kit_tests_" + BuildParams.testSeed
 }

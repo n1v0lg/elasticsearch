@@ -11,14 +11,11 @@ import fixture.azure.AzureHttpFixture;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Booleans;
-import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.TestTrustStore;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.junit.ClassRule;
 import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
-
-import java.util.Objects;
 
 import static org.hamcrest.Matchers.blankOrNullString;
 import static org.hamcrest.Matchers.not;
@@ -85,10 +82,7 @@ public class AzureSnapshotRepoTestKitIT extends AbstractSnapshotRepoTestKitRestT
         )
         .systemProperty(
             "AZURE_FEDERATED_TOKEN_FILE",
-            () -> Objects.requireNonNullElseGet(
-                AzureHttpFixture.class.getResource("azure-federated-token"),
-                ESTestCase.fail(null, "Federated token file test resource not found")
-            ).getPath(),
+            () -> fixture.tokenPath(),
             // TODO only set this if tenant and client id are set?
             s -> USE_FIXTURE
         )

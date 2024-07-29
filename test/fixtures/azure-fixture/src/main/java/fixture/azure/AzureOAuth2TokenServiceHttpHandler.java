@@ -38,9 +38,10 @@ public class AzureOAuth2TokenServiceHttpHandler implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
+        // TODO assert on query path
+        // "api-version=2018-02-01&resource=https://storage.azure.com".equals(exchange.getRequestURI().getQuery())
         if ("POST".equals(exchange.getRequestMethod())
-            && ("/" + tenantId + "/oauth2/v2.0/token").equals(exchange.getRequestURI().getPath())
-            && "api-version=2018-02-01&resource=https://storage.azure.com".equals(exchange.getRequestURI().getQuery())) {
+            && ("/" + tenantId + "/oauth2/v2.0/token").equals(exchange.getRequestURI().getPath())) {
             // TODO don't duplicate code with AzureMetadataServiceHttpHandler
             try (exchange; var xcb = XContentBuilder.builder(XContentType.JSON.xContent())) {
                 final var nowSeconds = System.currentTimeMillis() / 1000L;

@@ -19,6 +19,7 @@ import reactor.core.scheduler.Schedulers;
 import reactor.netty.resources.ConnectionProvider;
 import reactor.netty.resources.LoopResources;
 
+import com.azure.core.credential.TokenCredential;
 import com.azure.core.http.HttpClient;
 import com.azure.core.http.HttpMethod;
 import com.azure.core.http.HttpPipelineCallContext;
@@ -28,7 +29,7 @@ import com.azure.core.http.HttpResponse;
 import com.azure.core.http.ProxyOptions;
 import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
 import com.azure.core.http.policy.HttpPipelinePolicy;
-import com.azure.identity.DefaultAzureCredentialBuilder;
+import com.azure.identity.WorkloadIdentityCredentialBuilder;
 import com.azure.storage.blob.BlobServiceAsyncClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
@@ -170,13 +171,17 @@ class AzureClientProvider extends AbstractLifecycleComponent {
             .retryOptions(retryOptions);
 
         if (settings.hasCredentials() == false) {
-            final DefaultAzureCredentialBuilder credentialBuilder = new DefaultAzureCredentialBuilder().executorService(eventLoopGroup);
-            // TODO make me a setting
-            final boolean disableInstanceDiscovery = true;
-            if (disableInstanceDiscovery) {
-                credentialBuilder.disableInstanceDiscovery();
-            }
-            builder.credential(credentialBuilder.build());
+            final TokenCredential cred = new WorkloadIdentityCredentialBuilder().executorService(eventLoopGroup)
+                .disableInstanceDiscovery()
+                .build();
+            builder.credential(cred);
+            // final DefaultAzureCredentialBuilder credentialBuilder = new DefaultAzureCredentialBuilder().executorService(eventLoopGroup);
+            // // TODO make me a setting
+            // final boolean disableInstanceDiscovery = true;
+            // if (disableInstanceDiscovery) {
+            // credentialBuilder.disableInstanceDiscovery();
+            // }
+            // builder.credential(credentialBuilder.build());
         }
 
         if (successfulRequestConsumer != null) {

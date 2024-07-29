@@ -26,7 +26,6 @@ import java.security.cert.Certificate;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Predicate;
-
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 
@@ -44,7 +43,7 @@ public class AzureHttpFixture extends ExternalResource {
 
     private HttpServer server;
     private HttpServer metadataServer;
-    private HttpServer oauth2TokenServiceServer;
+    private String tokenPath;
 
     public enum Protocol {
         NONE,
@@ -77,6 +76,24 @@ public class AzureHttpFixture extends ExternalResource {
      * by the managed identity service.
      */
     public static final Predicate<String> MANAGED_IDENTITY_BEARER_TOKEN_PREDICATE = s -> fail(null, "should not be called");
+
+
+    public String tokenPath() {
+        return tokenPath;
+        // String path = AzureHttpFixture.class.getResource("azure-federated-token").getPath();
+        // System.out.println("Path path path: " + path);
+        // try {
+        // String content = new String(Files.readAllBytes(Paths.get(path)));
+        // System.out.println("Content content content: " + content);
+        // } catch (IOException e) {
+        // e.printStackTrace();
+        // }
+        // return path;
+        // return Objects.requireNonNullElseGet(
+        // AzureHttpFixture.class.getResource("azure-federated-token"),
+        // ESTestCase.fail(null, "Federated token file test resource not found")
+        // ).getPath();
+    }
 
     /**
      * @param bearerToken The bearer token to accept
@@ -122,13 +139,18 @@ public class AzureHttpFixture extends ExternalResource {
     }
 
     public String getOAuthTokenServiceAddress() {
-        return scheme() + server.getAddress().getHostString() + ":" + metadataServer.getAddress().getPort() + "/";
+        return scheme() + "://" + server.getAddress().getHostString() + ":" + server.getAddress().getPort() + "/";
     }
 
     @Override
     protected void before() {
         try {
             final var bearerToken = ESTestCase.randomIdentifier();
+
+            {
+                final var tmpdir = ESTestCase.createTempDir();
+                tokenPath = copyResource(tmpdir, "azure-federated-token").toString();
+            }
 
             if (protocol != Protocol.NONE) {
                 this.metadataServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
@@ -173,6 +195,8 @@ public class AzureHttpFixture extends ExternalResource {
                     httpsServer.start();
                 }
             }
+
+
         } catch (Exception e) {
             throw new AssertionError("unexpected", e);
         }

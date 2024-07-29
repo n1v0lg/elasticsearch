@@ -122,7 +122,7 @@ public class AzureHttpFixture extends ExternalResource {
     }
 
     public String getOAuthTokenServiceAddress() {
-        return scheme() + metadataServer.getAddress().getHostString() + ":" + metadataServer.getAddress().getPort() + "/";
+        return scheme() + server.getAddress().getHostString() + ":" + metadataServer.getAddress().getPort() + "/";
     }
 
     @Override

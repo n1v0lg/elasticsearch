@@ -8,7 +8,6 @@ package org.elasticsearch.repositories.blobstore.testkit;
 
 import fixture.azure.AzureHttpFixture;
 
-import org.elasticsearch.common.CheckedSupplier;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Booleans;
@@ -19,8 +18,6 @@ import org.junit.ClassRule;
 import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.Objects;
 
 import static org.hamcrest.Matchers.blankOrNullString;
@@ -43,10 +40,6 @@ public class AzureSnapshotRepoTestKitIT extends AbstractSnapshotRepoTestKitRestT
         Strings.hasText(AZURE_TEST_KEY) || Strings.hasText(AZURE_TEST_SASTOKEN)
             ? AzureHttpFixture.sharedKeyForAccountPredicate(AZURE_TEST_ACCOUNT)
             : AzureHttpFixture.MANAGED_IDENTITY_BEARER_TOKEN_PREDICATE
-    );
-
-    private static CheckedSupplier<InputStream, IOException> federatedTokenFileSupplier = () -> AzureHttpFixture.class.getResourceAsStream(
-        "azure-federated-token"
     );
 
     private static TestTrustStore trustStore = new TestTrustStore(
@@ -79,7 +72,7 @@ public class AzureSnapshotRepoTestKitIT extends AbstractSnapshotRepoTestKitRestT
             }
         })
         .systemProperty("AZURE_POD_IDENTITY_AUTHORITY_HOST", () -> fixture.getMetadataAddress(), s -> USE_FIXTURE)
-        .systemProperty("AZURE_AUTHORITY_HOST", () -> fixture.getMetadataAddress(), s -> USE_FIXTURE)
+        .systemProperty("AZURE_AUTHORITY_HOST", () -> fixture.getOAuthTokenServiceAddress(), s -> USE_FIXTURE)
         .systemProperty(
             "AZURE_CLIENT_ID",
             () -> AZURE_TEST_CLIENT_ID,
@@ -88,7 +81,7 @@ public class AzureSnapshotRepoTestKitIT extends AbstractSnapshotRepoTestKitRestT
         .systemProperty(
             "AZURE_TENANT_ID",
             () -> AZURE_TEST_TENANT_ID,
-            s -> AZURE_TEST_CLIENT_ID != null && AZURE_TEST_CLIENT_ID.isEmpty() == false
+            s -> AZURE_TEST_TENANT_ID != null && AZURE_TEST_TENANT_ID.isEmpty() == false
         )
         .systemProperty(
             "AZURE_FEDERATED_TOKEN_FILE",
@@ -96,6 +89,7 @@ public class AzureSnapshotRepoTestKitIT extends AbstractSnapshotRepoTestKitRestT
                 AzureHttpFixture.class.getResource("azure-federated-token"),
                 ESTestCase.fail(null, "Federated token file test resource not found")
             ).getPath(),
+            // TODO only set this if tenant and client id are set?
             s -> USE_FIXTURE
         )
         .systemProperty("javax.net.ssl.trustStore", () -> trustStore.getTrustStorePath().toString(), s -> USE_FIXTURE)

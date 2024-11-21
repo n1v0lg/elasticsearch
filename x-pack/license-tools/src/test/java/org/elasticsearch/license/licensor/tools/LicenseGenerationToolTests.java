@@ -10,15 +10,20 @@ import org.elasticsearch.cli.Command;
 import org.elasticsearch.cli.CommandTestCase;
 import org.elasticsearch.cli.ExitCodes;
 import org.elasticsearch.cli.UserException;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.license.License;
 import org.elasticsearch.license.licensor.TestUtils;
+import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentType;
 import org.junit.Before;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+
+import static org.elasticsearch.license.licensor.TestUtils.dateMath;
+import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
 
 public class LicenseGenerationToolTests extends CommandTestCase {
 
@@ -93,6 +98,47 @@ public class LicenseGenerationToolTests extends CommandTestCase {
         final BytesArray bytes = new BytesArray(output.getBytes(StandardCharsets.UTF_8));
         License outputLicense = License.fromSource(bytes, XContentType.JSON);
         TestUtils.assertLicenseSpec(inputLicenseSpec, outputLicense);
+    }
+
+    public void testCreateLicense() throws Exception {
+        long now = System.currentTimeMillis();
+        long issueDateInMillis = dateMath("now", now);
+        long startDateInMillis = dateMath("now", now);
+        long expiryDateInMillis = dateMath("now+10d/d", now);
+        XContentBuilder licenses = jsonBuilder();
+        licenses.startObject();
+        String type = "platinum";
+        licenses.startObject("license")
+            .field("version", License.VERSION_CURRENT)
+            .field("uid", "b88849bc-ba2e-4c19-8711-30a227587992")
+            .field("type", type)
+            .field("subscription_type", type)
+            .field("issued_to", "issued_to")
+            .field("issuer", "issuer")
+            .field("issue_date_in_millis", issueDateInMillis)
+            .field("expiry_date_in_millis", expiryDateInMillis)
+            .field("start_date_in_millis", startDateInMillis);
+        if (type.equals("enterprise")) {
+            licenses.field("max_resource_units", 100);
+        } else {
+            licenses.field("max_nodes", 100);
+        }
+        licenses.endObject();
+        licenses.endObject();
+        var licenseSpecString = Strings.toString(licenses);
+        Path licenseSpecFile = createTempFile();
+        Files.writeString(licenseSpecFile, licenseSpecString);
+        String output = execute(
+            "--publicKeyPath",
+            pubKeyPath.toString(),
+            "--privateKeyPath",
+            priKeyPath.toString(),
+            "--licenseFile",
+            licenseSpecFile.toString()
+        );
+        final BytesArray bytes = new BytesArray(output.getBytes(StandardCharsets.UTF_8));
+        License outputLicense = License.fromSource(bytes, XContentType.JSON);
+        System.out.println("{\"licenses\": [" + outputLicense + "]}");
     }
 
 }

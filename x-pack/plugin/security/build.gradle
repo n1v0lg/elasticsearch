@@ -19,6 +19,7 @@ dependencies {
   compileOnly project(path: xpackModule('core'))
   api project(path: ':modules:transport-netty4')
 
+  implementation("org.openjdk.jol:jol-core:0.16")
   testImplementation project(path: xpackModule('ilm'))
   testImplementation project(path: xpackModule('downsample'))
   testImplementation project(path: xpackModule('mapper-aggregate-metric'))

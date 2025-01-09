@@ -1,4 +1,5 @@
 grant {
+  permission java.security.AllPermission;
   permission java.lang.RuntimePermission "setFactory";
 
   // secure the users file from other things (current and legacy locations)

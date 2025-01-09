@@ -6,6 +6,7 @@
  */
 package org.elasticsearch.xpack.security.authz.store;
 
+import org.openjdk.jol.info.GraphLayout;
 import org.apache.logging.log4j.Level;
 import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.TransportVersion;

@@ -15,8 +15,19 @@ import org.openjdk.jol.info.GraphLayout;
 public class FieldPermissionsMemoryUsageTests extends ESTestCase {
 
     public void testMemoryUsage() {
-        var current = new FieldPermissions(new FieldPermissionsDefinition(new String[] { "field_0" }, new String[] {}));
-        var currentTotalSize = GraphLayout.parseInstance(current).totalSize();
+        var smallFls = new FieldPermissions(
+            new FieldPermissionsDefinition(new String[] { "field_0", "field_1", "field_2" }, new String[] {})
+        );
+        System.out.println(GraphLayout.parseInstance(smallFls).toPrintable());
+        long currentTotalSize = GraphLayout.parseInstance(smallFls).totalSize();
+        System.out.println("Total size: " + currentTotalSize + " bytes");
+
+        String[] grant = new String[1000];
+        for (int i = 0; i < 1000; i++) {
+            grant[i] = "field_" + i;
+        }
+        var bigFls = new FieldPermissions(new FieldPermissionsDefinition(grant, new String[] {}));
+        currentTotalSize = GraphLayout.parseInstance(bigFls).totalSize();
         System.out.println("Total size: " + currentTotalSize + " bytes");
     }
 

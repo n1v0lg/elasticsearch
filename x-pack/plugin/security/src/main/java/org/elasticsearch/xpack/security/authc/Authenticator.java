@@ -76,7 +76,26 @@ public interface Authenticator {
     }
 
     static SecureString extractApiKeyFromHeader(ThreadContext threadContext) {
-        return extractCredentialFromAuthorizationHeader(threadContext, "ApiKey");
+        SecureString credentials = extractCredentialFromAuthorizationHeader(threadContext, "ApiKey");
+        if (credentials == null) {
+            return null;
+        }
+        if (credentials.toString().startsWith("essu_")) {
+            return null;
+        }
+        return credentials;
+    }
+
+    static SecureString extractCloudApiKeyFromHeader(ThreadContext threadContext) {
+        SecureString credentials = extractCredentialFromAuthorizationHeader(threadContext, "ApiKey");
+        if (credentials == null) {
+            return null;
+        }
+        if (false == credentials.toString().startsWith("essu_")) {
+            return null;
+        }
+        // need the full credential
+        return new SecureString(threadContext.getHeader("Authorization"));
     }
 
     /**
@@ -207,6 +226,13 @@ public interface Authenticator {
         }
 
         public SecureString getApiKeyString() {
+            if (apiKeyString == null) {
+                apiKeyString = extractApiKeyFromHeader(threadContext);
+            }
+            return apiKeyString;
+        }
+
+        public SecureString getUniversalApiKeyString() {
             if (apiKeyString == null) {
                 apiKeyString = extractApiKeyFromHeader(threadContext);
             }

@@ -38,6 +38,9 @@ import org.elasticsearch.xpack.security.audit.AuditTrail;
 import org.elasticsearch.xpack.security.audit.AuditTrailService;
 import org.elasticsearch.xpack.security.audit.AuditUtil;
 import org.elasticsearch.xpack.security.authc.service.ServiceAccountService;
+import org.elasticsearch.xpack.security.authc.uiam.ProjectInfoProvider;
+import org.elasticsearch.xpack.security.authc.uiam.UiamClient;
+import org.elasticsearch.xpack.security.authc.uiam.CloudApiKeyAuthenticator;
 import org.elasticsearch.xpack.security.operator.OperatorPrivileges.OperatorPrivilegesService;
 import org.elasticsearch.xpack.security.support.SecurityIndexManager;
 
@@ -115,6 +118,7 @@ public class AuthenticationService {
             new AuthenticationContextSerializer(),
             new ServiceAccountAuthenticator(serviceAccountService, nodeName, meterRegistry),
             new OAuth2TokenAuthenticator(tokenService, meterRegistry),
+            new CloudApiKeyAuthenticator(new UiamClient(UiamClient.create()), new ProjectInfoProvider(settings)),
             new ApiKeyAuthenticator(apiKeyService, nodeName, meterRegistry),
             new RealmsAuthenticator(numInvalidation, lastSuccessfulAuthCache, meterRegistry)
         );

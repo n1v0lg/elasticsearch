@@ -7,15 +7,9 @@
 
 module org.elasticsearch.security {
     requires java.naming;
-    requires java.security.jgss;
-    requires java.xml;
 
-    requires org.elasticsearch.base;
-    requires org.elasticsearch.cli;
-    requires org.elasticsearch.server;
     requires org.elasticsearch.sslconfig;
     requires org.elasticsearch.transport.netty4;
-    requires org.elasticsearch.xcontent;
     requires org.elasticsearch.xcore;
 
     requires org.apache.commons.codec;
@@ -24,11 +18,6 @@ module org.elasticsearch.security {
     requires org.apache.httpcomponents.httpasyncclient;
     requires org.apache.httpcomponents.httpcore.nio;
     requires org.apache.log4j;
-    requires org.apache.logging.log4j;
-    requires org.apache.logging.log4j.core;
-    requires org.apache.lucene.core;
-    requires org.apache.lucene.queries;
-    requires org.apache.lucene.sandbox;
 
     requires org.opensaml.core;
     requires org.opensaml.saml;
@@ -43,13 +32,13 @@ module org.elasticsearch.security {
     requires io.netty.codec.http;
     requires io.netty.handler;
     requires io.netty.transport;
-    requires jopt.simple;
     requires json.smart;
     requires net.shibboleth.utilities.java.support;
     requires oauth2.oidc.sdk;
     requires org.slf4j;
     requires unboundid.ldapsdk;
-    requires org.elasticsearch.logging;
+    requires org.elasticsearch.serverless.constants;
+    requires org.elasticsearch.server;
 
     exports org.elasticsearch.xpack.security.action to org.elasticsearch.server;
     exports org.elasticsearch.xpack.security.action.apikey to org.elasticsearch.server;

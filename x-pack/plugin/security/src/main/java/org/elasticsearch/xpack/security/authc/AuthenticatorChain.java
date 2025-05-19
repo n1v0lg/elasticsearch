@@ -54,7 +54,7 @@ class AuthenticatorChain {
         AuthenticationContextSerializer authenticationSerializer,
         ServiceAccountAuthenticator serviceAccountAuthenticator,
         OAuth2TokenAuthenticator oAuth2TokenAuthenticator,
-        ExternalAuthenticator externalAuthenticator,
+        CloudApiKeyAuthenticator cloudApiKeyAuthenticator,
         ApiKeyAuthenticator apiKeyAuthenticator,
         RealmsAuthenticator realmsAuthenticator
     ) {
@@ -68,7 +68,7 @@ class AuthenticatorChain {
         this.allAuthenticators = List.of(
             serviceAccountAuthenticator,
             oAuth2TokenAuthenticator,
-            externalAuthenticator,
+            cloudApiKeyAuthenticator,
             apiKeyAuthenticator,
             realmsAuthenticator
         );

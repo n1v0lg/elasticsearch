@@ -76,14 +76,7 @@ public interface Authenticator {
     }
 
     static SecureString extractApiKeyFromHeader(ThreadContext threadContext) {
-        SecureString credentials = extractCredentialFromAuthorizationHeader(threadContext, "ApiKey");
-        if (credentials == null) {
-            return null;
-        }
-        if (credentials.toString().startsWith("essu_")) {
-            return null;
-        }
-        return credentials;
+        return extractCredentialFromAuthorizationHeader(threadContext, "ApiKey");
     }
 
     static SecureString extractCloudApiKeyFromHeader(ThreadContext threadContext) {

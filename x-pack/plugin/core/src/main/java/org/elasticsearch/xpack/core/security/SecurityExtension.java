@@ -15,7 +15,7 @@ import org.elasticsearch.env.Environment;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.watcher.ResourceWatcherService;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationFailureHandler;
-import org.elasticsearch.xpack.core.security.authc.ExternalApiKeyService;
+import org.elasticsearch.xpack.core.security.authc.CloudApiKeyService;
 import org.elasticsearch.xpack.core.security.authc.Realm;
 import org.elasticsearch.xpack.core.security.authc.service.NodeLocalServiceAccountTokenStore;
 import org.elasticsearch.xpack.core.security.authc.service.ServiceAccountTokenStore;
@@ -129,7 +129,7 @@ public interface SecurityExtension {
         return null;
     }
 
-    default ExternalApiKeyService getExternalApiKeyService(SecurityComponents components) {
+    default CloudApiKeyService getExternalApiKeyService(SecurityComponents components) {
         return null;
     }
 

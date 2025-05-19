@@ -1225,7 +1225,7 @@ public final class Authentication implements ToXContentObject {
         }
 
         static RealmRef newCloudApiKeyRealmRef(String nodeName) {
-            // no domain for cloud API Key tokens
+            // no domain for cloud API key tokens
             return new RealmRef(CLOUD_API_KEY_REALM_NAME, CLOUD_API_KEY_REALM_TYPE, nodeName, null);
         }
 

@@ -29,6 +29,7 @@ import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationFailureHandler;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationServiceField;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationToken;
+import org.elasticsearch.xpack.core.security.authc.ExternalApiKeyService;
 import org.elasticsearch.xpack.core.security.authc.Realm;
 import org.elasticsearch.xpack.core.security.authc.support.AuthenticationContextSerializer;
 import org.elasticsearch.xpack.core.security.authz.AuthorizationEngine.EmptyAuthorizationInfo;
@@ -38,9 +39,6 @@ import org.elasticsearch.xpack.security.audit.AuditTrail;
 import org.elasticsearch.xpack.security.audit.AuditTrailService;
 import org.elasticsearch.xpack.security.audit.AuditUtil;
 import org.elasticsearch.xpack.security.authc.service.ServiceAccountService;
-import org.elasticsearch.xpack.security.authc.uiam.ProjectInfoProvider;
-import org.elasticsearch.xpack.security.authc.uiam.UiamClient;
-import org.elasticsearch.xpack.security.authc.uiam.CloudApiKeyAuthenticator;
 import org.elasticsearch.xpack.security.operator.OperatorPrivileges.OperatorPrivilegesService;
 import org.elasticsearch.xpack.security.support.SecurityIndexManager;
 
@@ -95,7 +93,8 @@ public class AuthenticationService {
         ApiKeyService apiKeyService,
         ServiceAccountService serviceAccountService,
         OperatorPrivilegesService operatorPrivilegesService,
-        MeterRegistry meterRegistry
+        MeterRegistry meterRegistry,
+        ExternalApiKeyService externalApiKeyService
     ) {
         this.realms = realms;
         this.auditTrailService = auditTrailService;
@@ -118,7 +117,7 @@ public class AuthenticationService {
             new AuthenticationContextSerializer(),
             new ServiceAccountAuthenticator(serviceAccountService, nodeName, meterRegistry),
             new OAuth2TokenAuthenticator(tokenService, meterRegistry),
-            new CloudApiKeyAuthenticator(new UiamClient(UiamClient.create()), new ProjectInfoProvider(settings)),
+            new ExternalAuthenticator(externalApiKeyService),
             new ApiKeyAuthenticator(apiKeyService, nodeName, meterRegistry),
             new RealmsAuthenticator(numInvalidation, lastSuccessfulAuthCache, meterRegistry)
         );

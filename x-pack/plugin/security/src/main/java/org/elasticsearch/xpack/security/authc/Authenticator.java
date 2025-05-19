@@ -232,13 +232,6 @@ public interface Authenticator {
             return apiKeyString;
         }
 
-        public SecureString getUniversalApiKeyString() {
-            if (apiKeyString == null) {
-                apiKeyString = extractApiKeyFromHeader(threadContext);
-            }
-            return apiKeyString;
-        }
-
         public List<Realm> getDefaultOrderedRealmList() {
             if (defaultOrderedRealmList == null) {
                 defaultOrderedRealmList = realms.getActiveRealms();

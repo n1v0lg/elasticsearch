@@ -24,7 +24,6 @@ import org.elasticsearch.xpack.core.security.support.Exceptions;
 import org.elasticsearch.xpack.core.security.user.AnonymousUser;
 import org.elasticsearch.xpack.core.security.user.SystemUser;
 import org.elasticsearch.xpack.core.security.user.User;
-import org.elasticsearch.xpack.security.authc.uiam.CloudApiKeyAuthenticator;
 import org.elasticsearch.xpack.security.operator.OperatorPrivileges.OperatorPrivilegesService;
 
 import java.util.List;
@@ -55,7 +54,7 @@ class AuthenticatorChain {
         AuthenticationContextSerializer authenticationSerializer,
         ServiceAccountAuthenticator serviceAccountAuthenticator,
         OAuth2TokenAuthenticator oAuth2TokenAuthenticator,
-        CloudApiKeyAuthenticator cloudApiKeyAuthenticator,
+        ExternalAuthenticator externalAuthenticator,
         ApiKeyAuthenticator apiKeyAuthenticator,
         RealmsAuthenticator realmsAuthenticator
     ) {
@@ -69,7 +68,7 @@ class AuthenticatorChain {
         this.allAuthenticators = List.of(
             serviceAccountAuthenticator,
             oAuth2TokenAuthenticator,
-            cloudApiKeyAuthenticator,
+            externalAuthenticator,
             apiKeyAuthenticator,
             realmsAuthenticator
         );

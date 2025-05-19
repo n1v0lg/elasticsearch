@@ -203,6 +203,7 @@ import org.elasticsearch.xpack.core.security.authc.AuthenticationFailureHandler;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationServiceField;
 import org.elasticsearch.xpack.core.security.authc.DefaultAuthenticationFailureHandler;
+import org.elasticsearch.xpack.core.security.authc.ExternalApiKeyService;
 import org.elasticsearch.xpack.core.security.authc.InternalRealmsSettings;
 import org.elasticsearch.xpack.core.security.authc.Realm;
 import org.elasticsearch.xpack.core.security.authc.RealmConfig;
@@ -1101,6 +1102,17 @@ public class Security extends Plugin
             operatorPrivilegesService.set(OperatorPrivileges.NOOP_OPERATOR_PRIVILEGES_SERVICE);
         }
 
+        SetOnce<ExternalApiKeyService> externalApiKeyService = new SetOnce<>();
+        for (var extension : securityExtensions) {
+            ExternalApiKeyService inner = extension.getExternalApiKeyService(extensionComponents);
+            if (inner != null) {
+                externalApiKeyService.set(inner);
+            }
+        }
+        if (externalApiKeyService.get() == null) {
+            externalApiKeyService.set(new ExternalApiKeyService.Noop());
+        }
+
         authcService.set(
             new AuthenticationService(
                 settings,
@@ -1113,7 +1125,8 @@ public class Security extends Plugin
                 apiKeyService,
                 serviceAccountService,
                 operatorPrivilegesService.get(),
-                telemetryProvider.getMeterRegistry()
+                telemetryProvider.getMeterRegistry(),
+                externalApiKeyService.get()
             )
         );
         components.add(authcService.get());

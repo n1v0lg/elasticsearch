@@ -79,18 +79,6 @@ public interface Authenticator {
         return extractCredentialFromAuthorizationHeader(threadContext, "ApiKey");
     }
 
-    static SecureString extractCloudApiKeyFromHeader(ThreadContext threadContext) {
-        SecureString credentials = extractCredentialFromAuthorizationHeader(threadContext, "ApiKey");
-        if (credentials == null) {
-            return null;
-        }
-        if (false == credentials.toString().startsWith("essu_")) {
-            return null;
-        }
-        // need the full credential
-        return new SecureString(threadContext.getHeader("Authorization"));
-    }
-
     /**
      * This class is a container to encapsulate the current request and other necessary information (mostly configuration related)
      * required for authentication.

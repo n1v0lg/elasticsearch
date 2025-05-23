@@ -1102,16 +1102,18 @@ public class Security extends Plugin
             operatorPrivilegesService.set(OperatorPrivileges.NOOP_OPERATOR_PRIVILEGES_SERVICE);
         }
 
-        SetOnce<CloudApiKeyService> externalApiKeyService = new SetOnce<>();
+        // TODO ensure internal extensions only
+        SetOnce<CloudApiKeyService> cloudApiKeyService = new SetOnce<>();
         for (var extension : securityExtensions) {
-            CloudApiKeyService inner = extension.getExternalApiKeyService(extensionComponents);
+            CloudApiKeyService inner = extension.getCloudApiKeyService(extensionComponents);
             if (inner != null) {
-                externalApiKeyService.set(inner);
+                cloudApiKeyService.set(inner);
             }
         }
-        if (externalApiKeyService.get() == null) {
-            externalApiKeyService.set(new CloudApiKeyService.Noop());
+        if (cloudApiKeyService.get() == null) {
+            cloudApiKeyService.set(new CloudApiKeyService.Noop());
         }
+        components.add(cloudApiKeyService.get());
 
         authcService.set(
             new AuthenticationService(
@@ -1126,7 +1128,7 @@ public class Security extends Plugin
                 serviceAccountService,
                 operatorPrivilegesService.get(),
                 telemetryProvider.getMeterRegistry(),
-                externalApiKeyService.get()
+                cloudApiKeyService.get()
             )
         );
         components.add(authcService.get());

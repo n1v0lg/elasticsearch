@@ -52,7 +52,7 @@ public interface CloudApiKeyService {
 
         @Override
         public void authenticate(CloudApiKey cloudApiKey, ActionListener<AuthenticationResult<User>> listener) {
-            assert false : "noop implementation of authenticate should never be called";
+            assert false : "should never be called";
             listener.onResponse(AuthenticationResult.notHandled());
         }
     }

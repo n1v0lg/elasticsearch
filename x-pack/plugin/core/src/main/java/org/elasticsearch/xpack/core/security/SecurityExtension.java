@@ -129,7 +129,7 @@ public interface SecurityExtension {
         return null;
     }
 
-    default CloudApiKeyService getExternalApiKeyService(SecurityComponents components) {
+    default CloudApiKeyService getCloudApiKeyService(SecurityComponents components) {
         return null;
     }
 

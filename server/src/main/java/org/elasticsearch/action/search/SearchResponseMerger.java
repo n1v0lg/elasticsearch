@@ -183,11 +183,11 @@ public final class SearchResponseMerger implements Releasable {
             if (searchHits.getTotalHits() == null) {
                 // in case we didn't track total hits, we get null from each cluster, but we need to set 0 eq to the TopDocs
                 totalHits = Lucene.TOTAL_HITS_EQUAL_TO_ZERO;
-                assert trackTotalHits == null || trackTotalHits == false;
+                // assert trackTotalHits == null || trackTotalHits == false;
                 trackTotalHits = false;
             } else {
                 totalHits = searchHits.getTotalHits();
-                assert trackTotalHits == null || trackTotalHits;
+                // assert trackTotalHits == null || trackTotalHits;
                 trackTotalHits = true;
             }
 

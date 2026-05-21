@@ -6,6 +6,7 @@
  */
 package org.elasticsearch.xpack.security.authz;
 
+import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.IndicesRequest;
 import org.elasticsearch.action.ResolvedIndexExpression;
@@ -63,6 +64,7 @@ import org.elasticsearch.indices.InvalidIndexNameException;
 import org.elasticsearch.indices.TestIndexNameExpressionResolver;
 import org.elasticsearch.license.MockLicenseState;
 import org.elasticsearch.protocol.xpack.graph.GraphExploreRequest;
+import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.crossproject.CrossProjectModeDecider;
 import org.elasticsearch.search.crossproject.NoMatchingProjectException;
 import org.elasticsearch.search.crossproject.ProjectRoutingInfo;
@@ -912,6 +914,133 @@ public class IndicesAndAliasesResolverTests extends ESTestCase {
             return Regex.simpleMatch(excludedIndex + "*", name);
         }
         return name.equals(excludedIndex);
+    }
+
+    public void testExcludeFromLocalExpressionsEmptyExclusionsIsNoOp() {
+        var builder = ResolvedIndexExpressions.builder();
+        builder.addExpressions("logs", mutableSet("logs"), SUCCESS, Set.of());
+
+        builder.excludeFromLocalExpressions(Set.of());
+
+        ResolvedIndexExpressions resolved = builder.build();
+        assertThat(resolved.expressions(), hasSize(1));
+        assertEntry(resolved.expressions().get(0), "logs", SUCCESS, Set.of("logs"));
+    }
+
+    public void testExcludeFromLocalExpressionsRemovesMatchingIndicesFromSuccess() {
+        var builder = ResolvedIndexExpressions.builder();
+        builder.addExpressions("logs*", mutableSet("logs-1", "logs-2"), SUCCESS, Set.of());
+
+        builder.excludeFromLocalExpressions(Set.of("logs-1"));
+
+        ResolvedIndexExpressions resolved = builder.build();
+        assertThat(resolved.expressions(), hasSize(1));
+        assertEntry(resolved.expressions().get(0), "logs*", SUCCESS, Set.of("logs-2"));
+    }
+
+    public void testExcludeFromLocalExpressionsEmptiesSuccessIndicesButKeepsEntry() {
+        var builder = ResolvedIndexExpressions.builder();
+        builder.addExpressions("logs", mutableSet("logs"), SUCCESS, Set.of());
+
+        builder.excludeFromLocalExpressions(Set.of("logs"));
+
+        ResolvedIndexExpressions resolved = builder.build();
+        assertThat(resolved.expressions(), hasSize(1));
+        assertEntry(resolved.expressions().get(0), "logs", SUCCESS, Set.of());
+    }
+
+    public void testExcludeFromLocalExpressionsKeepsConcreteResourceNotVisibleWithEmptyIndices() {
+        var builder = ResolvedIndexExpressions.builder();
+        builder.addExpressions("logs", mutableSet("logs"), CONCRETE_RESOURCE_NOT_VISIBLE, Set.of());
+
+        builder.excludeFromLocalExpressions(Set.of("logs"));
+
+        ResolvedIndexExpressions resolved = builder.build();
+        assertThat(resolved.expressions(), hasSize(1));
+        assertEntry(resolved.expressions().get(0), "logs", CONCRETE_RESOURCE_NOT_VISIBLE, Set.of());
+    }
+
+    public void testExcludeFromLocalExpressionsKeepsConcreteResourceUnauthorizedWithExceptionAndEmptyIndices() {
+        var builder = ResolvedIndexExpressions.builder();
+        var unauthorized = new ElasticsearchSecurityException("denied", RestStatus.FORBIDDEN);
+        builder.addExpression(
+            new ResolvedIndexExpression(
+                "logs",
+                new ResolvedIndexExpression.LocalExpressions(mutableSet("logs"), CONCRETE_RESOURCE_UNAUTHORIZED, unauthorized),
+                Set.of()
+            )
+        );
+
+        builder.excludeFromLocalExpressions(Set.of("logs"));
+
+        ResolvedIndexExpressions resolved = builder.build();
+        assertThat(resolved.expressions(), hasSize(1));
+        var entry = resolved.expressions().get(0);
+        assertThat(entry.original(), equalTo("logs"));
+        assertThat(entry.localExpressions().indices(), empty());
+        assertThat(entry.localExpressions().localIndexResolutionResult(), is(CONCRETE_RESOURCE_UNAUTHORIZED));
+        assertThat(entry.localExpressions().exception(), notNullValue());
+        assertThat(entry.localExpressions().exception(), sameInstance(unauthorized));
+    }
+
+    public void testExcludeFromLocalExpressionsLeavesUnrelatedEntriesUntouched() {
+        var builder = ResolvedIndexExpressions.builder();
+        builder.addExpressions("logs", mutableSet("logs"), SUCCESS, Set.of());
+        builder.addExpressions("metrics", mutableSet("metrics"), SUCCESS, Set.of());
+
+        builder.excludeFromLocalExpressions(Set.of("logs"));
+
+        ResolvedIndexExpressions resolved = builder.build();
+        assertThat(resolved.expressions(), hasSize(2));
+        assertEntry(resolved.expressions().get(0), "logs", SUCCESS, Set.of());
+        assertEntry(resolved.expressions().get(1), "metrics", SUCCESS, Set.of("metrics"));
+    }
+
+    public void testExcludeFromLocalExpressionsAppliesAcrossMultipleEntries() {
+        var builder = ResolvedIndexExpressions.builder();
+        builder.addExpressions("logs*", mutableSet("logs-1", "logs-2"), SUCCESS, Set.of());
+        builder.addExpressions("logs-1", mutableSet("logs-1"), SUCCESS, Set.of());
+
+        builder.excludeFromLocalExpressions(Set.of("logs-1"));
+
+        ResolvedIndexExpressions resolved = builder.build();
+        assertThat(resolved.expressions(), hasSize(2));
+        assertThat(resolved.expressions().get(0).original(), equalTo("logs*"));
+        assertThat(resolved.expressions().get(0).localExpressions().indices(), containsInAnyOrder("logs-2"));
+        assertThat(resolved.expressions().get(1).original(), equalTo("logs-1"));
+        assertThat(resolved.expressions().get(1).localExpressions().indices(), empty());
+    }
+
+    public void testExcludeFromLocalExpressionsSkipsEntriesWithEmptyIndices() {
+        var builder = ResolvedIndexExpressions.builder();
+        builder.addRemoteExpressions("remote:logs", Set.of("remote:logs"));
+
+        builder.excludeFromLocalExpressions(Set.of("logs"));
+
+        ResolvedIndexExpressions resolved = builder.build();
+        assertThat(resolved.expressions(), hasSize(1));
+        assertThat(resolved.expressions().get(0).original(), equalTo("remote:logs"));
+        assertThat(resolved.expressions().get(0).localExpressions(), sameInstance(ResolvedIndexExpression.LocalExpressions.NONE));
+        assertThat(resolved.expressions().get(0).remoteExpressions(), contains("remote:logs"));
+    }
+
+    private static void assertEntry(
+        ResolvedIndexExpression entry,
+        String original,
+        ResolvedIndexExpression.LocalIndexResolutionResult result,
+        Set<String> indices
+    ) {
+        assertThat(entry.original(), equalTo(original));
+        assertThat(entry.localExpressions().localIndexResolutionResult(), is(result));
+        assertThat(entry.localExpressions().indices(), equalTo(indices));
+    }
+
+    private static HashSet<String> mutableSet(String... values) {
+        HashSet<String> set = new HashSet<>();
+        for (String value : values) {
+            set.add(value);
+        }
+        return set;
     }
 
     public void testExclusionWithPriorWildcards() {

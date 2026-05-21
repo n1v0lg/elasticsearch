@@ -870,7 +870,14 @@ public class IndicesAndAliasesResolverTests extends ESTestCase {
                 assertThat(request.indices(), arrayContaining(NO_INDICES_OR_ALIASES_ARRAY));
                 ResolvedIndexExpressions actual = request.getResolvedIndexExpressions();
                 assertThat(actual, is(notNullValue()));
-                assertThat(actual.expressions(), empty());
+                assertThat(
+                    actual.expressions(),
+                    contains(
+                        includedIndices.stream()
+                            .map(name -> resolvedIndexExpression(name, Set.of(), SUCCESS))
+                            .toArray(ResolvedIndexExpression[]::new)
+                    )
+                );
             } else {
                 expectThrows(
                     IndexNotFoundException.class,
@@ -886,12 +893,25 @@ public class IndicesAndAliasesResolverTests extends ESTestCase {
             assertThat(
                 actual.expressions(),
                 contains(
-                    Arrays.stream(expectedIndices)
-                        .map(name -> resolvedIndexExpression(name, Set.of(name), SUCCESS))
+                    includedIndices.stream()
+                        .map(
+                            name -> resolvedIndexExpression(
+                                name,
+                                isExcluded(name, excludedIndex, indexExclusion) ? Set.of() : Set.of(name),
+                                SUCCESS
+                            )
+                        )
                         .toArray(ResolvedIndexExpression[]::new)
                 )
             );
         }
+    }
+
+    private static boolean isExcluded(String name, String excludedIndex, String indexExclusion) {
+        if (indexExclusion.endsWith("*")) {
+            return Regex.simpleMatch(excludedIndex + "*", name);
+        }
+        return name.equals(excludedIndex);
     }
 
     public void testExclusionWithPriorWildcards() {
